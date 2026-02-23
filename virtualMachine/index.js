@@ -1,5 +1,7 @@
-const memory = new Uint8Array(256);
+const memory = new Uint8Array(65536);
 const registers = new Uint8Array(8);
+const SP = 7; // last register is stack pointer
+registers[SP] = 0xFF; // stack starts at top of RAM
 let pc = 0; // Program counter
 let ZF = 0; // Zero flag
 let interval;
@@ -22,6 +24,13 @@ const OPCODES = {
     JZ:  0x31,
     JNZ: 0x32,
     CMP: 0x33,
+
+    PUSH: 0x70,
+    POP:  0x71,
+    CALL: 0x72,
+    RET:  0x73,
+
+    MOV: 0x13,
 
     PRINT: 0x40,
     HALT:  0xFF
@@ -58,9 +67,13 @@ function assemble(source) {
         else if (["ADD","SUB","MUL","DIV","AND","OR","XOR","CMP"].includes(instr)) pc += 3;
         else if (["NOT","PRINT"].includes(instr)) pc += 2;
         else if (["JMP","JZ","JNZ"].includes(instr)) pc += 2;
+        else if (["PUSH","POP","CALL"].includes(instr)) pc += 2;
+        else if (instr === "RET") pc += 1;
         else if (instr === "HALT") pc += 1;
         else throw new Error("Unknown instruction: " + instr);
     }
+
+    console.log("LABELS:", labels);
 
     // Emit bytes
     for (let raw of lines) {
@@ -111,6 +124,23 @@ function assemble(source) {
                 output.push(OPCODES[instr], val(parts[1]));
                 break;
 
+            case "PUSH":
+            case "POP":
+                output.push(OPCODES[instr], reg(parts[1]));
+                break;
+            
+            case "CALL":
+                output.push(OPCODES.CALL, val(parts[1]));
+                break;
+            
+            case "RET":
+                output.push(OPCODES.RET);
+                break;
+
+            case "MOV":
+                output.push(OPCODES.MOV, reg(parts[1]), reg(parts[2]));
+                break;
+
             case "HALT":
                 output.push(OPCODES.HALT);
                 break;
@@ -125,14 +155,21 @@ function assemble(source) {
 
 const programText = `
 LOAD R0, 1
-LOAD R1, 2
-LOAD R2, 256 ; Loop until R0 is 256
-loop:
-MUL R0, R1
-PRINT R0
-CMP R0, R2
-JNZ loop
+CALL A
 HALT
+
+A:
+    LOAD R0, 2
+    PUSH R0      ; Save R0 (which is 2) onto the stack
+    CALL B
+    POP R0       ; Restore R0 from the stack after B returns
+    PRINT R0     ; Print 2 from the restored register
+    RET
+
+B:
+    LOAD R0, 3
+    PRINT R0     ; Prints 3
+    RET
 `;
 
 const program = assemble(programText);
@@ -152,114 +189,153 @@ function clock() {
         case 0x00:
             break;
 
-        case 0x10: { // LOAD r, immediate
+        case OPCODES.LOAD: { // LOAD r, immediate
             const r = memory[pc++];
             const value = memory[pc++];
             registers[r] = value;
             break;
         }
 
-        case 0x11: { // LOAD r, addr
+        case OPCODES.LDR: { // LDR r, addr
             const r = memory[pc++];
             const addr = memory[pc++];
             registers[r] = memory[addr];
             break;
         }
 
-        case 0x12: { // STORE r, addr
+        case OPCODES.STR: { // STR r, addr
             const r = memory[pc++];
             const addr = memory[pc++];
             memory[addr] = registers[r];
             break;
         }
 
-        case 0x20: { // ADD rA, rB
+        case OPCODES.ADD: { // ADD rA, rB
             const rA = memory[pc++];
             const rB = memory[pc++];
             registers[rA] = registers[rA] + registers[rB];
             break;
         }
 
-        case 0x21: { // SUB rA, rB
+        case OPCODES.SUB: { // SUB rA, rB
             const rA = memory[pc++];
             const rB = memory[pc++];
             registers[rA] = registers[rA] - registers[rB];
             break;
         }
 
-        case 0x22: { // MUL rA, rB
+        case OPCODES.MUL: { // MUL rA, rB
             const rA = memory[pc++];
             const rB = memory[pc++];
             registers[rA] = registers[rA] * registers[rB];
             break;
         }
 
-        case 0x23: { // DIV rA, rB
+        case OPCODES.DIV: { // DIV rA, rB
             const rA = memory[pc++];
             const rB = memory[pc++];
             registers[rA] = Math.floor(registers[rA] / registers[rB]);
             break;
         }
 
-        case 0x24: { // AND rA, rB
+        case OPCODES.AND: { // AND rA, rB
             const rA = memory[pc++];
             const rB = memory[pc++];
             registers[rA] = registers[rA] & registers[rB]
             break;
         }
 
-        case 0x25: { // OR rA, rB
+        case OPCODES.OR: { // OR rA, rB
             const rA = memory[pc++];
             const rB = memory[pc++];
             registers[rA] = registers[rA] | registers[rB];
             break;
         }
 
-        case 0x26: { // XOR rA, rB
+        case OPCODES.XOR: { // XOR rA, rB
             const rA = memory[pc++];
             const rB = memory[pc++];
             registers[rA] = registers[rA] ^ registers[rB];
             break;
         }
 
-        case 0x27: { // NOT r
+        case OPCODES.NOT: { // NOT r
             const r = memory[pc++];
             registers[r] = ~registers[r];
             break;
         }
 
-        case 0x30: { // JMP addr
+        case OPCODES.JMP: { // JMP addr
             const addr = memory[pc++];
             pc = addr;
             break;
         }
 
-        case 0x31: { // JZ addr
+        case OPCODES.JZ: { // JZ addr
             const addr = memory[pc++];
             if (ZF === 1) pc = addr;
             break;
         }
         
-        case 0x32: { // JNZ addr
+        case OPCODES.JNZ: { // JNZ addr
             const addr = memory[pc++];
             if (ZF === 0) pc = addr;
             break;
         }        
 
-        case 0x33: { // CMP rA, rB
+        case OPCODES.CMP: { // CMP rA, rB
             const rA = memory[pc++];
             const rB = memory[pc++];
             ZF = (registers[rA] === registers[rB]) ? 1 : 0;
             break;
         }
         
-        case 0x40: { // PRINT r
+        case OPCODES.PRINT: { // PRINT r
             const r = memory[pc++];
             console.log(registers[r]);
             break;
         }
 
-        case 0xFF: {
+        case OPCODES.PUSH: {
+            const r = memory[pc++];      // which register to push
+            registers[SP]--;             // move stack pointer down
+            memory[registers[SP]] = registers[r];  // store value
+            break;
+        }
+        
+        case OPCODES.POP: {
+            const r = memory[pc++]; // which register to pop into
+            registers[r] = memory[registers[SP]];
+            registers[SP]++; // move stack pointer up
+            break;
+        }
+
+        case OPCODES.CALL: {
+            const addr = memory[pc++]; // function address
+        
+            // push return address
+            registers[SP]--;
+            memory[registers[SP]] = pc;
+        
+            // jump to function
+            pc = addr;
+            break;
+        }
+
+        case OPCODES.RET: {
+            pc = memory[registers[SP]];
+            registers[SP]++;
+            break;
+        }
+
+        case OPCODES.MOV: { // MOV rDest, rSrc
+            const rDest = memory[pc++];
+            const rSrc = memory[pc++];
+            registers[rDest] = registers[rSrc];
+            break;
+        }        
+        
+        case OPCODES.HALT: {
             console.log("HALT");
             clearInterval(interval);
             break;
@@ -272,4 +348,4 @@ function clock() {
     }
 }
 
-interval = setInterval(clock, 1000);
+interval = setInterval(clock, 500);
