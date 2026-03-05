@@ -96,13 +96,35 @@ class Wire extends Block {
                 
                 if (!neighbor || visited.has(nid)) continue;
     
-                // 1. If it's a wire, just add it to the search queue
+                // If it's a wire, just add it to the search queue
                 if (neighbor instanceof Wire) {
                     visited.add(nid);
                     queue.push(nid);
-                } 
-                // 2. ONLY these blocks can actually RETURN "true" for power
+                }        
+                else if (neighbor instanceof Bridge) {
+                    // Determine which direction the wire is relative to the bridge
+                    // dir: 0:Up, 1:Right, 2:Down, 3:Left (relative to the wire)
+                    // We need to know if the wire is at the bridge's OUTPUT.
+                    
+                    // Check Lane A Output (Forward Neighbor)
+                    const isAtOutputA = neighbor.rotation === (dir + 2) % 4;
+                    if (isAtOutputA && neighbor.powerH > 0) {
+                        foundPower = true;
+                        break;
+                    }
+                
+                    // Check Lane B Output (Right Neighbor relative to rotation)
+                    const isAtOutputB = ((neighbor.rotation + 1) % 4) === (dir + 2) % 4;
+                    if (isAtOutputB && neighbor.powerV > 0) {
+                        foundPower = true;
+                        break;
+                    }
+                }
                 else if (neighbor instanceof Switch && neighbor.power > 0) {
+                    foundPower = true;
+                    break;
+                }
+                else if ((neighbor instanceof Switch || neighbor instanceof Button) && neighbor.power > 0) {
                     foundPower = true;
                     break;
                 } 
@@ -124,8 +146,9 @@ class Wire extends Block {
 class Inverter extends Block {
     update() {
         const input = this.getBackNeighbor();
-        this.power = (input && input.power > 0) ? 0 : 1;
-    }
+        const inputPower = (input && input.power > 0) ? 1 : 0;
+        this.power = inputPower ? 0 : 1;
+    }    
 }
 
 class Diode extends Block {
@@ -165,6 +188,92 @@ class Button extends Block {
     }
 }
 
+class Bridge extends Block {
+    constructor(x, y, rotation = 0) {
+        super(x, y, rotation);
+        this.powerH = 0; 
+        this.powerV = 0;
+        this.lastPowerH = 0;
+        this.lastPowerV = 0;
+    }
+
+    prepareNextTick() {
+        this.lastPowerH = this.powerH;
+        this.lastPowerV = this.powerV;
+        // Keep the base lastPower sync'd for generic checks
+        this.lastPower = (this.powerH || this.powerV) ? 1 : 0;
+    }
+
+    update() {
+        const oldH = this.powerH;
+        const oldV = this.powerV;
+    
+        const inputA = this.getBackNeighbor();
+        this.powerH = (inputA && inputA.power > 0) ? 1 : 0;
+    
+        const inputB = this.getLeftNeighbor();
+        this.powerV = (inputB && inputB.power > 0) ? 1 : 0;
+    
+        this.power = (this.powerH || this.powerV) ? 1 : 0;
+    
+        // If output changed, dirty neighbors
+        if (this.powerH !== oldH || this.powerV !== oldV) {
+            this.dirtyNeighbors();
+        }
+    }    
+}
+
+class Lamp extends Block {
+    constructor(x, y, rotation = 0) {
+        super(x, y, rotation);
+    }
+
+    prepareNextTick() {
+        this.lastPower = this.power;
+    }
+
+    update() {
+        const input = this.getBackNeighbor();
+        const newPower = (input && input.power > 0) ? 1 : 0;
+
+        this.power = newPower;
+
+        if (this.power !== this.lastPower) {
+            this.dirtyNeighbors();
+        }
+    }
+}
+
+class Toggle extends Block {
+    constructor(x, y, rotation = 0) {
+        super(x, y, rotation);
+        this.state = 0;
+        this.lastInput = 0;
+    }
+
+    prepareNextTick() {
+        this.lastPower = this.power;
+    }
+
+    update() {
+        const input = this.getBackNeighbor();
+        const inputPower = (input && input.power > 0) ? 1 : 0;
+
+        // Rising edge: 0 → 1
+        if (this.lastInput === 0 && inputPower === 1) {
+            this.state = this.state ? 0 : 1; // flip
+        }
+
+        this.lastInput = inputPower;
+
+        // Output = stored state
+        this.power = this.state;
+
+        if (this.power !== this.lastPower) {
+            this.dirtyNeighbors();
+        }
+    }
+}
 
 // Tool Selection
 document.querySelectorAll('.tool').forEach(btn => {
@@ -250,8 +359,11 @@ function handleInteraction(e) {
             if (currentTool === "wire") newBlock = new Wire(x, y);
             if (currentTool === "inverter") newBlock = new Inverter(x, y, currentRotation);
             if (currentTool === "diode") newBlock = new Diode(x, y, currentRotation);
+            if (currentTool === "bridge") newBlock = new Bridge(x, y, currentRotation);
             if (currentTool === "switch") newBlock = new Switch(x, y);
             if (currentTool === "button") newBlock = new Button(x, y);
+            if (currentTool === "lamp") newBlock = new Lamp(x, y, currentRotation);
+            if (currentTool === "toggle") newBlock = new Toggle(x, y, currentRotation);
 
             if (newBlock) {
                 grid[id] = newBlock;
@@ -269,43 +381,41 @@ canvas.addEventListener("contextmenu", e => e.preventDefault());
 function tick() {
     if (dirtyBlocks.size === 0) return;
 
-    // These only update once per tick to create the necessary delay for clocks.
-    let initialDirty = new Set(dirtyBlocks);
+    let toProcess = new Set(dirtyBlocks);
     dirtyBlocks.clear();
 
-    for (let id of initialDirty) {
+    // PHASE 1: Components
+    for (let id of toProcess) {
         const block = grid[id];
         if (block && !(block instanceof Wire)) {
             block.prepareNextTick();
             block.update();
-            if (block.power !== block.lastPower) {
+
+            let changed = false;
+            if (block instanceof Bridge) {
+                changed = (block.powerH !== block.lastPowerH || block.powerV !== block.lastPowerV);
+            } else {
+                changed = (block.power !== block.lastPower);
+            }
+
+            if (changed) {
                 block.dirtyNeighbors();
             }
         } else if (block instanceof Wire) {
+            // Pass wires to Phase 2
             dirtyBlocks.add(id);
         }
     }
 
-    // Wires loop until they stabilize
-    let wiresChanged = true;
-    let limit = 100; 
-
-    while (wiresChanged && limit-- > 0) {
-        wiresChanged = false;
-        let wireQueue = new Set(dirtyBlocks);
-        dirtyBlocks.clear();
-
-        for (let id of wireQueue) {
-            const block = grid[id];
-            if (block instanceof Wire) {
-                block.prepareNextTick();
-                block.update();
-                if (block.power !== block.lastPower) {
-                    block.dirtyNeighbors();
-                    wiresChanged = true;
-                }
-            } else if (block instanceof Inverter) {
-                dirtyBlocks.add(id);
+    // PHASE 2: Wires (BFS)
+    let wireProcess = new Set(dirtyBlocks);
+    for (let id of wireProcess) {
+        const block = grid[id];
+        if (block instanceof Wire) {
+            block.prepareNextTick();
+            block.update();
+            if (block.power !== block.lastPower) {
+                block.dirtyNeighbors();
             }
         }
     }
@@ -401,7 +511,7 @@ function render() {
             ctx.restore();
         } else if (block instanceof Diode) {
             const center = cellSize / 2;
-            const baseSize = cellSize * 0.3;
+            const baseSize = cellSize * 0.5;
             
             ctx.save();
             ctx.translate(x + center, y + center);
@@ -417,11 +527,11 @@ function render() {
         
             // Inner Triangle (Power Indicator)
             ctx.fillStyle = block.power ? "#ff4d4d" : "#441111";
-            const inner = baseSize * 0.6;
+            const inner = baseSize * 0.7;
             ctx.beginPath();
-            ctx.moveTo(-inner, -inner); 
-            ctx.lineTo(inner, 0);          
-            ctx.lineTo(-inner, inner);  
+            ctx.moveTo(-inner, -inner);
+            ctx.lineTo(inner, 0);
+            ctx.lineTo(-inner, inner);
             ctx.fill();
         
             ctx.restore();
@@ -454,7 +564,102 @@ function render() {
             ctx.beginPath();
             ctx.arc(x + center, y + center, indicatorRadius, 0, Math.PI * 2);
             ctx.fill();
-        }
+        } else if (block instanceof Bridge) {
+            const cx = x + cellSize / 2;
+            const cy = y + cellSize / 2;
+            const thick = cellSize * 0.2;
+            const len = cellSize * 0.4;
+        
+            ctx.save();
+            ctx.translate(cx, cy);
+            ctx.rotate((block.rotation - 1) * Math.PI / 2);
+        
+            // Lane A (Forward/Back)
+            ctx.strokeStyle = block.powerH ? "#ff4d4d" : "#441111";
+            ctx.lineWidth = thick;
+            ctx.beginPath();
+            ctx.moveTo(-len, 0); ctx.lineTo(len, 0); // Line
+            ctx.moveTo(len, 0); ctx.lineTo(len-5, -5); // Small arrow tip
+            ctx.stroke();
+        
+            // Lane B (Left/Right) - Crosses over
+            ctx.strokeStyle = block.powerV ? "#ff4d4d" : "#441111";
+            ctx.beginPath();
+            ctx.moveTo(0, -len); ctx.lineTo(0, len); // Line
+            ctx.moveTo(0, len); ctx.lineTo(5, len-5); // Small arrow tip
+            ctx.stroke();
+        
+            ctx.restore();
+        } else if (block instanceof Lamp) {
+            const cx = x + cellSize / 2;
+            const cy = y + cellSize / 2;
+        
+            ctx.save();
+            ctx.translate(cx, cy);
+            ctx.rotate((block.rotation - 1) * Math.PI / 2);
+        
+            // Lamp body (full cell)
+            ctx.fillStyle = block.power ? "#ffffff" : "#000000";
+            ctx.fillRect(-cellSize/2, -cellSize/2, cellSize, cellSize);
+        
+            // Input triangle (scaled to cell size)
+            const triW = cellSize * 0.25;  // width of triangle
+            const triH = cellSize * 0.20;  // height of triangle
+            const offset = cellSize * 0.5; // distance from center to edge
+        
+            ctx.fillStyle = block.power ? "#ff4d4d" : "#441111";
+            ctx.beginPath();
+            ctx.moveTo(-offset + triW, 0);
+            ctx.lineTo(-offset, -triH);
+            ctx.lineTo(-offset, triH);
+            ctx.closePath();
+            ctx.fill();
+        
+            ctx.restore();
+        } else if (block instanceof Toggle) {
+            const cx = x + cellSize / 2;
+            const cy = y + cellSize / 2;
+        
+            ctx.save();
+            ctx.translate(cx, cy);
+            ctx.rotate((block.rotation - 1) * Math.PI / 2);
+        
+            // Background
+            ctx.fillStyle = "#222";
+            ctx.fillRect(-cellSize/2, -cellSize/2, cellSize, cellSize);
+        
+            // Cross indicator
+            const barLen = cellSize * 0.35;
+            const barThick = cellSize * 0.18;
+            const color = block.power ? "#ff4d4d" : "#441111";
+        
+            ctx.fillStyle = color;
+        
+            // Horizontal bar
+            ctx.beginPath();
+            ctx.roundRect(-barLen, -barThick/2, barLen*2, barThick, barThick/2);
+            ctx.fill();
+        
+            // Vertical bar
+            ctx.beginPath();
+            ctx.roundRect(-barThick/2, -barLen, barThick, barLen*2, barThick/2);
+            ctx.fill();
+        
+            // Input triangle
+            const triW = cellSize * 0.25;
+            const triH = cellSize * 0.20;
+            const offset = cellSize * 0.5;
+        
+            ctx.fillStyle = color;
+            ctx.beginPath();
+            ctx.moveTo(-offset + triW, 0);
+            ctx.lineTo(-offset, -triH);
+            ctx.lineTo(-offset, triH);
+            ctx.closePath();
+            ctx.fill();
+        
+            ctx.restore();
+        }        
     });
 }
 
