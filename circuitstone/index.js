@@ -5,10 +5,10 @@ const ctx = canvas.getContext("2d");
 canvas.width  = Math.floor(canvas.clientWidth);
 canvas.height = Math.floor(canvas.clientHeight);
 
-const gridWidth = 50;
-const gridHeight = 25;
-const grid = new Array(gridWidth * gridHeight).fill(null);
-const cellSize = canvas.width / gridWidth;
+let gridWidth = 60;
+let gridHeight = 30;
+let grid = new Array(gridWidth * gridHeight).fill(null);
+let cellSize = canvas.width / gridWidth;
 let dirtyBlocks = new Set();
 
 let currentTool = "wire";
@@ -29,6 +29,7 @@ function exportToJSON() {
             x: block.x,
             y: block.y,
             rotation: block.rotation,
+            color: block.color || null,
             power: block.power,
             state: block.state ?? 0 // For Toggle
         };
@@ -51,25 +52,42 @@ function importFromJSON(event) {
     reader.onload = (e) => {
         const parsed = JSON.parse(e.target.result);
         
-        // Mapping types to constructors
+        // 1. Update dimensions to match the file
+        gridWidth = parsed.gridWidth || 50;
+        gridHeight = parsed.gridHeight || 25;
+        cellSize = canvas.width / gridWidth; // Recalculate cell size for rendering
+
+        // 2. Re-initialize the grid array
+        grid = new Array(gridWidth * gridHeight).fill(null);
+        dirtyBlocks.clear();
+
+        // 3. Mapping string names to actual Classes
         const constructors = { 
             Wire, Inverter, Diode, Bridge, Switch, 
             Button, Lamp, Toggle, HoverSensor 
         };
 
-        grid.fill(null); // Clear current grid
-
-        parsed.data.forEach((b, i) => {
+        // 4. Rebuild the world
+        parsed.data.forEach((b) => {
             if (!b) return;
+            
             const BlockClass = constructors[b.type];
             if (BlockClass) {
                 const newBlock = new BlockClass(b.x, b.y, b.rotation);
                 newBlock.power = b.power || 0;
+                
+                if (b.color) newBlock.color = b.color;
                 if (b.state !== undefined) newBlock.state = b.state;
-                grid[i] = newBlock;
-                dirtyBlocks.add(i); // Force update on load
+
+                // Place in the correct slot based on the NEW gridWidth
+                const id = b.y * gridWidth + b.x;
+                grid[id] = newBlock;
+                dirtyBlocks.add(id);
             }
         });
+        
+        console.log("Import Complete!");
+        render();
     };
     reader.readAsText(file);
 }
@@ -118,6 +136,29 @@ class Block {
                 dirtyBlocks.add(ny * gridWidth + nx);
             }
         }
+    }
+
+    getNeighborPower(dir) {
+        const neighbor = this.getNeighbor(dir);
+        if (!neighbor) return 0;
+    
+        if (neighbor instanceof Bridge) {
+            // 'dir' is the direction FROM this block TO the bridge.
+            // We need to know which lane of the bridge points at US.
+            
+            // Is our block at the Bridge's Lane A Output?
+            const isAtOutputA = neighbor.rotation === (dir + 2) % 4;
+            if (isAtOutputA) return neighbor.powerH;
+    
+            // Is our block at the Bridge's Lane B Output?
+            const isAtOutputB = ((neighbor.rotation + 1) % 4) === (dir + 2) % 4;
+            if (isAtOutputB) return neighbor.powerV;
+    
+            return 0; // Not at an output
+        }
+    
+        // Default: just return the standard power
+        return neighbor.power;
     }    
 
     prepareNextTick() {
@@ -139,8 +180,11 @@ class Wire extends Block {
     
         while (queue.length > 0) {
             let currentId = queue.shift();
+            let currWire = grid[currentId];
             let currX = currentId % gridWidth;
             let currY = Math.floor(currentId / gridWidth);
+
+            if (!currWire || !(currWire instanceof Wire)) continue;
             
             const neighbors = [
                 {nx: currX, ny: currY - 1, dir: 0}, // Up
@@ -157,9 +201,17 @@ class Wire extends Block {
                 if (!neighbor || visited.has(nid)) continue;
     
                 // If it's a wire, just add it to the search queue
-                if (neighbor instanceof Wire && neighbor.color === this.color) { // Only same color wires
-                    visited.add(nid);
-                    queue.push(nid);
+                if (neighbor instanceof Wire) {
+                    // Check connection between the wire we just stepped onto (currWire) 
+                    // and the neighbor we are looking at
+                    const canConnect = (currWire.color === "white" || 
+                                        neighbor.color === "white" || 
+                                        currWire.color === neighbor.color);
+                
+                    if (canConnect) {
+                        visited.add(nid);
+                        queue.push(nid);
+                    }
                 }
                 else if (neighbor instanceof Bridge) {
                     // We check if the wire is at the bridge's specific lane outputs:
@@ -207,16 +259,13 @@ class Wire extends Block {
 
 class Inverter extends Block {
     update() {
-        const input = this.getBackNeighbor();
-        const inputPower = (input && input.power > 0) ? 1 : 0;
-        this.power = inputPower ? 0 : 1;
+        this.power = this.getNeighborPower((this.rotation + 2) % 4) > 0 ? 0 : 1;
     }    
 }
 
 class Diode extends Block {
     update() {
-        const input = this.getBackNeighbor();
-        this.power = (input && input.power > 0) ? 1 : 0;
+        this.power = this.getNeighborPower((this.rotation + 2) % 4) > 0 ? 1 : 0;
     }
 }
 
@@ -304,10 +353,7 @@ class Lamp extends Block {
     }
 
     update() {
-        const input = this.getBackNeighbor();
-        const newPower = (input && input.power > 0) ? 1 : 0;
-
-        this.power = newPower;
+        this.power = this.getNeighborPower((this.rotation + 2) % 4) > 0 ? 1 : 0;
 
         if (this.power !== this.lastPower) {
             this.dirtyNeighbors();
@@ -394,13 +440,11 @@ window.addEventListener("keydown", (e) => {
     }
     // Wire color hotkeys
     const colorPicker = document.getElementById("wire-color");
-    if (e.key === "1") {
-        colorPicker.value = "red";
-    } else if (e.key === "2") {
-        colorPicker.value = "green";
-    } else if (e.key === "3") {
-        colorPicker.value = "blue";
-    }
+    if (e.key === "1") colorPicker.value = "red";
+    else if (e.key === "2") colorPicker.value = "green";
+    else if (e.key === "3") colorPicker.value = "blue";
+    else if (e.key === "4") colorPicker.value = "white";
+
     document.getElementById("rot-display").innerText = rotationNames[currentRotation];
 });
 
@@ -507,6 +551,23 @@ function handleInteraction(e) {
     }
 }
 
+function resizeGrid(newW, newH) {
+    let newGrid = new Array(newW * newH).fill(null);
+    
+    grid.forEach((block) => {
+        if (block && block.x < newW && block.y < newH) {
+            const newId = block.y * newW + block.x;
+            newGrid[newId] = block;
+        }
+    });
+
+    gridWidth = newW;
+    gridHeight = newH;
+    grid = newGrid;
+    cellSize = canvas.width / gridWidth;
+    render();
+}
+
 canvas.addEventListener("contextmenu", e => e.preventDefault());
 
 
@@ -573,8 +634,9 @@ function render() {
         if (block instanceof Wire) {
             const colorMap = {
                 red: block.power ? "#ff4d4d" : "#441111",
+                green: block.power ? "#4dff4d" : "#114411",
                 blue: block.power ? "#4d4dff" : "#111144",
-                green: block.power ? "#4dff4d" : "#114411"
+                white: block.power ? "#ffffff" : "#555555"
             };
             ctx.strokeStyle = colorMap[block.color];
             ctx.lineWidth = cellSize * 0.2;
@@ -598,7 +660,17 @@ function render() {
             ];
         
             neighbors.forEach(neighbor => {
-                if (neighbor.n && (!(neighbor.n instanceof Wire) || neighbor.n.color === block.color)) {
+                if (!neighbor.n) return; 
+
+                const isWire = neighbor.n instanceof Wire;
+                const connects = isWire && (
+                    block.color === "white" || 
+                    neighbor.n.color === "white" || 
+                    block.color === neighbor.n.color
+                );
+                
+                const isComponent = !isWire; 
+                if (connects || isComponent) {
                     ctx.beginPath();
                     ctx.moveTo(centerX, centerY);
                     ctx.lineTo(centerX + neighbor.dx, centerY + neighbor.dy);
