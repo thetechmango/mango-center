@@ -5,7 +5,7 @@ const ctx = canvas.getContext("2d");
 canvas.width  = Math.floor(canvas.clientWidth);
 canvas.height = Math.floor(canvas.clientHeight);
 
-const gridWidth = 25;
+const gridWidth = 50;
 const gridHeight = 25;
 const grid = new Array(gridWidth * gridHeight).fill(null);
 const cellSize = canvas.width / gridWidth;
@@ -422,11 +422,11 @@ function tick() {
 }
 
 function render() {
-    ctx.fillStyle = "#1a1a1a"; // Background
+    ctx.fillStyle = "#111"; // Background
     ctx.fillRect(0, 0, canvas.width, canvas.height);
 
-    // Draw Grid Lines (optional but helpful)
-    ctx.strokeStyle = "#333";
+    // Draw Grid Lines
+    ctx.strokeStyle = "#222";
     ctx.lineWidth = 1;
     for (let i = 0; i <= gridWidth; i++) {
         ctx.beginPath(); ctx.moveTo(i * cellSize, 0); ctx.lineTo(i * cellSize, canvas.height); ctx.stroke();
@@ -751,7 +751,7 @@ function render() {
 }
 
 let lastTickTime = 0;
-const tickRate = 100; // 10 tps
+const tickRate = 50; // 20 tps
 
 function frame(timestamp) {
     if (timestamp - lastTickTime >= tickRate) {
