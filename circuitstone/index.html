@@ -1,0 +1,75 @@
+<!doctype html>
+<html>
+
+<head>
+    <title>Circuitstone</title>
+    <style>
+        body {
+            background-color: #000;
+            margin: 0;
+            padding: 0;
+        }
+
+        #canvas {
+            background-color: #fff;
+            border: 3px solid #104010;
+            border-radius: 5px;
+
+            position: fixed;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+
+            height: 80vh;
+            aspect-ratio: 1;
+        }
+
+        #toolbar {
+            position: fixed;   
+            top: 20px;
+            left: 50%;
+            transform: translateX(-50%);
+            background: #222;
+            padding: 10px;
+            border-radius: 8px;
+            display: flex;
+            gap: 10px;
+            border: 2px solid #104010;
+            color: white;
+            font-family: sans-serif;
+            align-items: center;
+        }
+
+        .tool {
+            background: #444;
+            color: white;
+            border: none;
+            padding: 8px 15px;
+            cursor: pointer;
+            border-radius: 4px;
+        }
+
+        .tool.active {
+            background: #108010;
+            font-weight: bold;
+        }
+
+        .info { font-size: 12px; color: #aaa; margin-left: 10px; }
+
+    </style>
+</head>
+
+<body>
+    <div id="toolbar">
+        <button class="tool active" data-type="wire">Wire</button>
+        <button class="tool" data-type="inverter">Inverter</button>
+        <button class="tool" data-type="diode">Diode</button>
+        <button class="tool" data-type="switch">Switch</button>
+        <button class="tool" data-type="button">Button</button>
+        <div class="info">Rotation: <span id="rot-display">Right</span></div>
+    </div>
+    <canvas id="canvas"></canvas>
+    <script src="index.js"></script>
+</body>
+
+</html>
