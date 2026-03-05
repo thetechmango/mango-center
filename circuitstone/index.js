@@ -126,6 +126,10 @@ class Block {
 }
 
 class Wire extends Block {
+    constructor(x, y, rotation = 0, color = "red") {
+        super(x, y, rotation);
+        this.color = color;
+    }
     update() {
         let visited = new Set();
         let queue = [this.y * gridWidth + this.x];
@@ -153,23 +157,21 @@ class Wire extends Block {
                 if (!neighbor || visited.has(nid)) continue;
     
                 // If it's a wire, just add it to the search queue
-                if (neighbor instanceof Wire) {
+                if (neighbor instanceof Wire && neighbor.color === this.color) { // Only same color wires
                     visited.add(nid);
                     queue.push(nid);
-                }        
+                }
                 else if (neighbor instanceof Bridge) {
-                    // Determine which direction the wire is relative to the bridge
-                    // dir: 0:Up, 1:Right, 2:Down, 3:Left (relative to the wire)
-                    // We need to know if the wire is at the bridge's OUTPUT.
+                    // We check if the wire is at the bridge's specific lane outputs:
                     
-                    // Check Lane A Output (Forward Neighbor)
+                    // Lane A Output (The block the bridge's rotation points AT)
                     const isAtOutputA = neighbor.rotation === (dir + 2) % 4;
                     if (isAtOutputA && neighbor.powerH > 0) {
                         foundPower = true;
                         break;
                     }
-                
-                    // Check Lane B Output (Right Neighbor relative to rotation)
+
+                    // Lane B Output (The block 90deg clockwise from bridge's rotation)
                     const isAtOutputB = ((neighbor.rotation + 1) % 4) === (dir + 2) % 4;
                     if (isAtOutputB && neighbor.powerV > 0) {
                         foundPower = true;
@@ -260,7 +262,6 @@ class Bridge extends Block {
     prepareNextTick() {
         this.lastPowerH = this.powerH;
         this.lastPowerV = this.powerV;
-        // Keep the base lastPower sync'd for generic checks
         this.lastPower = (this.powerH || this.powerV) ? 1 : 0;
     }
 
@@ -268,19 +269,29 @@ class Bridge extends Block {
         const oldH = this.powerH;
         const oldV = this.powerV;
     
+        // --- Lane A (Horizontal/Forward) ---
         const inputA = this.getBackNeighbor();
-        this.powerH = (inputA && inputA.power > 0) ? 1 : 0;
+        if (inputA instanceof Bridge) {
+            // If the neighbor is a Bridge, take its 'Forward' lane power
+            this.powerH = inputA.powerH; 
+        } else {
+            // Otherwise, take standard power (Wires, Switches, etc.)
+            this.powerH = (inputA && inputA.power > 0) ? 1 : 0;
+        }
     
+        // --- Lane B (Vertical/Left) ---
         const inputB = this.getLeftNeighbor();
-        this.powerV = (inputB && inputB.power > 0) ? 1 : 0;
+        if (inputB instanceof Bridge) {
+            // If the neighbor is a Bridge, take its 'Vertical' lane power
+            this.powerV = inputB.powerV;
+        } else {
+            this.powerV = (inputB && inputB.power > 0) ? 1 : 0;
+        }
     
-        this.power = (this.powerH || this.powerV) ? 1 : 0;
-    
-        // If output changed, dirty neighbors
         if (this.powerH !== oldH || this.powerV !== oldV) {
             this.dirtyNeighbors();
         }
-    }    
+    }
 }
 
 class Lamp extends Block {
@@ -464,7 +475,10 @@ function handleInteraction(e) {
         } else {
             // Place new block
             let newBlock = null;
-            if (currentTool === "wire") newBlock = new Wire(x, y);
+            if (currentTool === "wire") {
+                const color = document.getElementById("wire-color").value;
+                newBlock = new Wire(x, y, 0, color);
+            }            
             else if (currentTool === "inverter") newBlock = new Inverter(x, y, currentRotation);
             else if (currentTool === "diode") newBlock = new Diode(x, y, currentRotation);
             else if (currentTool === "bridge") newBlock = new Bridge(x, y, currentRotation);
@@ -548,7 +562,12 @@ function render() {
         const y = block.y * cellSize;
 
         if (block instanceof Wire) {
-            ctx.strokeStyle = block.power ? "#ff4d4d" : "#441111";
+            const colorMap = {
+                red: block.power ? "#ff4d4d" : "#441111",
+                blue: block.power ? "#4d4dff" : "#111144",
+                green: block.power ? "#4dff4d" : "#114411"
+            };
+            ctx.strokeStyle = colorMap[block.color];
             ctx.lineWidth = cellSize * 0.2;
             ctx.lineCap = "round";
         
@@ -570,7 +589,7 @@ function render() {
             ];
         
             neighbors.forEach(neighbor => {
-                if (neighbor.n) {
+                if (neighbor.n && (!(neighbor.n instanceof Wire) || neighbor.n.color === block.color)) {
                     ctx.beginPath();
                     ctx.moveTo(centerX, centerY);
                     ctx.lineTo(centerX + neighbor.dx, centerY + neighbor.dy);
