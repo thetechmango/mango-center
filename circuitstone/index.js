@@ -470,10 +470,10 @@ function render() {
             });
         } else if (block instanceof Inverter) {
             const center = cellSize / 2;
-            const baseWidth = cellSize * 0.5;
+            const baseWidth = cellSize * 0.6;
             const indicatorSize = cellSize * 0.2;
-            const gap = cellSize * 0.1;
-            const margin = cellSize * 0.05;
+            const gap = cellSize * 0.15;
+            const margin = cellSize * 0.0;
         
             ctx.save();
             ctx.translate(x + center, y + center);
@@ -488,19 +488,25 @@ function render() {
             const outputColor = block.power ? "#ff4d4d" : "#441111";
             const inputColor = !block.power ? "#ff4d4d" : "#441111";
         
-            // The Input Circle (Back) - Shows what it's "seeing"
+            // Input triangle (Back)
             ctx.fillStyle = inputColor;
-            const circleX = -baseL/2 + (indicatorSize);
+            const triW = indicatorSize * 1;
+            const triH = indicatorSize * 0.9;
+            const triX = -baseL/2 + indicatorSize * 0.5;
+
             ctx.beginPath();
-            ctx.arc(circleX, 0, indicatorSize / 2, 0, Math.PI * 2);
+            ctx.moveTo(triX + triW, 0);
+            ctx.lineTo(triX, -triH);
+            ctx.lineTo(triX, triH);
+            ctx.closePath();
             ctx.fill();
-        
-            // The Output Line (Front) - Shows what it's "sending"
+
+            // Output line (Front)
             ctx.strokeStyle = outputColor;
             ctx.lineWidth = indicatorSize;
             ctx.lineCap = "butt";
             
-            const lineStart = circleX + (indicatorSize / 2) + gap;
+            const lineStart = triX + (indicatorSize / 2) + gap;
             const lineEnd = baseL / 2 - (indicatorSize / 2);
             
             ctx.beginPath();
@@ -517,12 +523,16 @@ function render() {
             ctx.translate(x + center, y + center);
             ctx.rotate((block.rotation - 1) * Math.PI / 2);
         
-            // Outer Triangle (Base)
+            // Full tile rounded base
             ctx.fillStyle = "#333";
             ctx.beginPath();
-            ctx.moveTo(-baseSize, -baseSize); 
-            ctx.lineTo(baseSize, 0);          
-            ctx.lineTo(-baseSize, baseSize);  
+            ctx.roundRect(
+                -cellSize/2,
+                -cellSize/2,
+                cellSize,
+                cellSize,
+                cellSize * 0.15 // corner radius
+            );
             ctx.fill();
         
             // Inner Triangle (Power Indicator)
@@ -536,58 +546,127 @@ function render() {
         
             ctx.restore();
         } else if (block instanceof Switch) {
-            const pad = cellSize * 0.15;
-            const border = cellSize * 0.1;
+            const center = cellSize / 2;
+            const baseSize = cellSize * 0.5;
             
-            // Square Base
-            ctx.fillStyle = "#333";
-            ctx.fillRect(x + pad, y + pad, cellSize - pad * 2, cellSize - pad * 2);
+            ctx.save();
+            ctx.translate(x + center, y + center);
+            ctx.rotate((block.rotation - 1) * Math.PI / 2);
         
-            // Square Indicator (Offset by border)
+            // Full tile rounded base
+            ctx.fillStyle = "#333";
+            ctx.beginPath();
+            ctx.roundRect(
+                -cellSize/2,
+                -cellSize/2,
+                cellSize,
+                cellSize,
+                cellSize * 0.15 // corner radius
+            );
+            ctx.fill();
+        
+            // Square Indicator
             ctx.fillStyle = block.power ? "#00ff00" : "#225522";
-            const innerPad = pad + border;
-            ctx.fillRect(x + innerPad, y + innerPad, cellSize - innerPad * 2, cellSize - innerPad * 2);
+            ctx.beginPath();
+            ctx.fillRect(
+                -cellSize/2 * 0.8,
+                -cellSize/2 * 0.8,
+                cellSize * 0.8,
+                cellSize * 0.8
+            );
+
+            ctx.restore();
         } else if (block instanceof Button) {
             const center = cellSize / 2;
-            const baseRadius = cellSize * 0.4;
-            const border = cellSize * 0.1;
+            const indicatorSize = cellSize * 0.8;
+            
+            ctx.save();
+            ctx.translate(x + center, y + center);
+            ctx.rotate((block.rotation - 1) * Math.PI / 2);
         
-            // Circle Base
+            // Full tile circle base
             ctx.fillStyle = "#333";
             ctx.beginPath();
-            ctx.arc(x + center, y + center, baseRadius, 0, Math.PI * 2);
+            ctx.arc(0, 0, cellSize/2, 0, Math.PI * 2);
             ctx.fill();
         
+            // Circle Indicator
             ctx.fillStyle = block.power ? "#00ff00" : "#225522";
-            const indicatorRadius = (baseRadius - border);
-            
             ctx.beginPath();
-            ctx.arc(x + center, y + center, indicatorRadius, 0, Math.PI * 2);
+            ctx.arc(0, 0, indicatorSize/2, 0, Math.PI * 2);
             ctx.fill();
+
+            ctx.restore();
+            
+            
         } else if (block instanceof Bridge) {
             const cx = x + cellSize / 2;
             const cy = y + cellSize / 2;
             const thick = cellSize * 0.2;
             const len = cellSize * 0.4;
+
+            ctx.lineCap = "round"
         
             ctx.save();
             ctx.translate(cx, cy);
             ctx.rotate((block.rotation - 1) * Math.PI / 2);
-        
-            // Lane A (Forward/Back)
+
+            // Full tile rounded base
+            ctx.fillStyle = "#333";
+            ctx.beginPath();
+            ctx.roundRect(
+                -cellSize/2,
+                -cellSize/2,
+                cellSize,
+                cellSize,
+                cellSize * 0.15 // corner radius
+            );
+            ctx.fill();
+
+            // Lane A (horizontal)
             ctx.strokeStyle = block.powerH ? "#ff4d4d" : "#441111";
             ctx.lineWidth = thick;
             ctx.beginPath();
-            ctx.moveTo(-len, 0); ctx.lineTo(len, 0); // Line
-            ctx.moveTo(len, 0); ctx.lineTo(len-5, -5); // Small arrow tip
+            ctx.moveTo(-len, 0);
+            ctx.lineTo(len, 0);
             ctx.stroke();
         
-            // Lane B (Left/Right) - Crosses over
+            // Arrow for Lane A (left side)
+            {
+                const triW = cellSize * 0.25;
+                const triH = cellSize * 0.20;
+                const offset = cellSize * 0.5;
+        
+                ctx.fillStyle = block.powerH ? "#ff4d4d" : "#441111";
+                ctx.beginPath();
+                ctx.moveTo(-offset + triW, 0);
+                ctx.lineTo(-offset, -triH);
+                ctx.lineTo(-offset, triH);
+                ctx.closePath();
+                ctx.fill();
+            }
+        
+            // Lane B (vertical)
             ctx.strokeStyle = block.powerV ? "#ff4d4d" : "#441111";
             ctx.beginPath();
-            ctx.moveTo(0, -len); ctx.lineTo(0, len); // Line
-            ctx.moveTo(0, len); ctx.lineTo(5, len-5); // Small arrow tip
+            ctx.moveTo(0, -len);
+            ctx.lineTo(0, len);
             ctx.stroke();
+        
+            // Arrow for Lane B (top side)
+            {
+                const triW = cellSize * 0.25;
+                const triH = cellSize * 0.20;
+                const offset = cellSize * 0.5;
+        
+                ctx.fillStyle = block.powerV ? "#ff4d4d" : "#441111";
+                ctx.beginPath();
+                ctx.moveTo(0, -offset + triW);
+                ctx.lineTo(-triH, -offset);
+                ctx.lineTo(triH, -offset);
+                ctx.closePath();
+                ctx.fill();
+            }
         
             ctx.restore();
         } else if (block instanceof Lamp) {
@@ -624,9 +703,17 @@ function render() {
             ctx.translate(cx, cy);
             ctx.rotate((block.rotation - 1) * Math.PI / 2);
         
-            // Background
-            ctx.fillStyle = "#222";
-            ctx.fillRect(-cellSize/2, -cellSize/2, cellSize, cellSize);
+            // Full tile rounded base
+            ctx.fillStyle = "#333";
+            ctx.beginPath();
+            ctx.roundRect(
+                -cellSize/2,
+                -cellSize/2,
+                cellSize,
+                cellSize,
+                cellSize * 0.15 // corner radius
+            );
+            ctx.fill();
         
             // Cross indicator
             const barLen = cellSize * 0.35;
