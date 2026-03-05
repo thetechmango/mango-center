@@ -18,6 +18,59 @@ let isDragging = false;
 let dragButton = -1;
 let pressedButton = null;
 
+function exportToJSON() {
+    const data = grid.map(block => {
+        if (!block) return null;
+        return {
+            type: block.constructor.name,
+            x: block.x,
+            y: block.y,
+            rotation: block.rotation,
+            power: block.power,
+            state: block.state ?? 0 // For Toggle
+        };
+    });
+
+    const blob = new Blob([JSON.stringify({ gridWidth, gridHeight, data })], { type: "application/json" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = "circuit_design.json";
+    a.click();
+    URL.revokeObjectURL(url);
+}
+
+function importFromJSON(event) {
+    const file = event.target.files[0];
+    if (!file) return;
+
+    const reader = new FileReader();
+    reader.onload = (e) => {
+        const parsed = JSON.parse(e.target.result);
+        
+        // Mapping types to constructors
+        const constructors = { 
+            Wire, Inverter, Diode, Bridge, Switch, 
+            Button, Lamp, Toggle, HoverSensor 
+        };
+
+        grid.fill(null); // Clear current grid
+
+        parsed.data.forEach((b, i) => {
+            if (!b) return;
+            const BlockClass = constructors[b.type];
+            if (BlockClass) {
+                const newBlock = new BlockClass(b.x, b.y, b.rotation);
+                newBlock.power = b.power || 0;
+                if (b.state !== undefined) newBlock.state = b.state;
+                grid[i] = newBlock;
+                dirtyBlocks.add(i); // Force update on load
+            }
+        });
+    };
+    reader.readAsText(file);
+}
+
 class Block {
     constructor(x, y, rotation = 0) {
         this.x = x;
@@ -134,6 +187,10 @@ class Wire extends Block {
                         foundPower = true;
                         break;
                     }
+                }
+                else if (neighbor instanceof HoverSensor && neighbor.power > 0) {
+                    foundPower = true;
+                    break;
                 }
             }
             if (foundPower) break;
@@ -275,6 +332,28 @@ class Toggle extends Block {
     }
 }
 
+class HoverSensor extends Block {
+    constructor(x, y, rotation = 0) {
+        super(x, y, rotation);
+        this.power = 0;
+    }
+
+    prepareNextTick() {
+        this.lastPower = this.power;
+    }
+
+    update() {
+        if (this.power !== this.lastPower) {
+            this.dirtyNeighbors();
+            dirtyBlocks.add(this.y * gridWidth + this.x);
+        }
+    }
+
+    interact() {}
+}
+
+
+
 // Tool Selection
 document.querySelectorAll('.tool').forEach(btn => {
     btn.addEventListener('click', () => {
@@ -287,7 +366,7 @@ document.querySelectorAll('.tool').forEach(btn => {
 // Hotkeys for Rotation
 window.addEventListener("keydown", (e) => {
     const key = e.key.toLowerCase();
-    if (key === 'r' || key === 'e') { // CW
+    if (key === 'e') { // CW
         currentRotation = (currentRotation + 1) % 4;
     } else if (key === 'q') { // CCW
         currentRotation = (currentRotation + 3) % 4; // +3 is same as -1 mod 4
@@ -313,12 +392,25 @@ canvas.addEventListener("mousedown", (e) => {
     }
 });
 
-window.addEventListener("mousemove", (e) => {
-    if (isDragging) {
-        // Drag wire to place OR drag right-click to delete
-        if ((dragButton === 0 && currentTool === "wire") || dragButton === 2) {
-            handleInteraction(e);
+canvas.addEventListener("mousemove", (e) => {
+    const rect = canvas.getBoundingClientRect();
+    const gx = Math.floor((e.clientX - rect.left) / (rect.width / gridWidth));
+    const gy = Math.floor((e.clientY - rect.top) / (rect.height / gridHeight));
+    const currentId = gy * gridWidth + gx;
+
+    grid.forEach((block, id) => {
+        if (block instanceof HoverSensor) {
+            const shouldBeOn = (id === currentId);
+            if (block.power !== (shouldBeOn ? 1 : 0)) {
+                block.power = shouldBeOn ? 1 : 0;
+                block.dirtyNeighbors();
+                dirtyBlocks.add(id);
+            }
         }
+    });
+
+    if (isDragging && (dragButton === 0 || dragButton === 2)) {
+        handleInteraction(e);
     }
 });
 
@@ -362,6 +454,7 @@ function handleInteraction(e) {
             if (currentTool === "bridge") newBlock = new Bridge(x, y, currentRotation);
             if (currentTool === "switch") newBlock = new Switch(x, y);
             if (currentTool === "button") newBlock = new Button(x, y);
+            if (currentTool === "hoverSensor") newBlock = new HoverSensor(x, y, currentRotation);
             if (currentTool === "lamp") newBlock = new Lamp(x, y, currentRotation);
             if (currentTool === "toggle") newBlock = new Toggle(x, y, currentRotation);
 
@@ -746,7 +839,36 @@ function render() {
             ctx.fill();
         
             ctx.restore();
-        }        
+        } else if (block instanceof HoverSensor) {
+            const center = cellSize / 2;
+            const ringOuter = cellSize * 0.35;
+            const ringWidth = cellSize * 0.12;
+        
+            ctx.save();
+            ctx.translate(x + center, y + center);
+            ctx.rotate((block.rotation - 1) * Math.PI / 2);
+        
+            // Full tile rounded base
+            ctx.fillStyle = "#333";
+            ctx.beginPath();
+            ctx.roundRect(
+                -cellSize/2,
+                -cellSize/2,
+                cellSize,
+                cellSize,
+                cellSize * 0.15
+            );
+            ctx.fill();
+        
+            // Donut indicator ring
+            ctx.strokeStyle = block.power ? "#00ff00" : "#225522";
+            ctx.lineWidth = ringWidth;
+            ctx.beginPath();
+            ctx.arc(0, 0, ringOuter, 0, Math.PI * 2);
+            ctx.stroke();
+        
+            ctx.restore();
+        }          
     });
 }
 
