@@ -682,9 +682,9 @@ function render() {
             ctx.fillRect(-cellSize/2, -cellSize/2, cellSize, cellSize);
         
             // Input triangle (scaled to cell size)
-            const triW = cellSize * 0.25;  // width of triangle
-            const triH = cellSize * 0.20;  // height of triangle
-            const offset = cellSize * 0.5; // distance from center to edge
+            const triW = cellSize * 0.25;
+            const triH = cellSize * 0.20;
+            const offset = cellSize * 0.5;
         
             ctx.fillStyle = block.power ? "#ff4d4d" : "#441111";
             ctx.beginPath();
