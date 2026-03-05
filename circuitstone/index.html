@@ -26,7 +26,7 @@
 
         #toolbar {
             position: fixed;   
-            width: 80vw;
+            width: 90vw;
             top: 20px;
             left: 50%;
             transform: translateX(-50%);
@@ -55,6 +55,29 @@
             font-weight: bold;
         }
 
+        .action-btn {
+            background: #333;
+            color: #eee;
+            border: 1px solid #555;
+            padding: 6px 12px;
+            cursor: pointer;
+            border-radius: 4px;
+            font-size: 13px;
+        }
+
+        .action-btn:hover {
+            background: #444;
+        }
+
+        .action-btn:active {
+            background: #222;
+        }
+
+        #pause-btn.paused {
+            background: #108010;
+            border-color: #20a020;
+        }
+
         .info { font-size: 12px; color: #aaa; margin-left: 10px; }
 
     </style>
@@ -72,6 +95,10 @@
         <button class="tool" data-type="lamp">Lamp</button>
         <button class="tool" data-type="toggle">Toggle</button>
         <div class="info">Rotation: <span id="rot-display">Right</span></div>
+
+        <button id="pause-btn" class="action-btn" onclick="togglePause()">Pause</button>
+        <button class="action-btn" onclick="step()">Step</button>
+
         <button onclick="exportToJSON()">Export JSON</button>
         <input type="file" id="importFile" style="display:none" onchange="importFromJSON(event)">
         <button onclick="document.getElementById('importFile').click()">Import JSON</button>

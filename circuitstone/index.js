@@ -17,6 +17,9 @@ const rotationNames = ["Up", "Right", "Down", "Left"];
 let isDragging = false;
 let dragButton = -1;
 let pressedButton = null;
+let lastInteractedId = null;
+
+let isPaused = false;
 
 function exportToJSON() {
     const data = grid.map(block => {
@@ -371,6 +374,13 @@ window.addEventListener("keydown", (e) => {
     } else if (key === 'q') { // CCW
         currentRotation = (currentRotation + 3) % 4; // +3 is same as -1 mod 4
     }
+    if (e.code === "Space") { // Space to Play/Pause
+        e.preventDefault(); // Stop page scrolling
+        togglePause();
+    }
+    if (e.key === "s" || e.key === "S") { // S to Step
+        step();
+    }
     document.getElementById("rot-display").innerText = rotationNames[currentRotation];
 });
 
@@ -383,12 +393,15 @@ canvas.addEventListener("mousedown", (e) => {
     const y = Math.floor((e.clientY - rect.top) / (rect.height / gridHeight));
     const id = y * gridWidth + x;
 
-    // Special logic for Button press
-    if (grid[id] instanceof Button && dragButton === 0) {
-        pressedButton = grid[id];
-        pressedButton.press();
-    } else {
-        handleInteraction(e);
+    lastInteractedId = id; 
+
+    if (x >= 0 && x < gridWidth && y >= 0 && y < gridHeight) {
+        if (grid[id] instanceof Button && dragButton === 0) {
+            pressedButton = grid[id];
+            pressedButton.press();
+        } else {
+            handleInteraction(e);
+        }
     }
 });
 
@@ -398,6 +411,7 @@ canvas.addEventListener("mousemove", (e) => {
     const gy = Math.floor((e.clientY - rect.top) / (rect.height / gridHeight));
     const currentId = gy * gridWidth + gx;
 
+    // Sensor logic
     grid.forEach((block, id) => {
         if (block instanceof HoverSensor) {
             const shouldBeOn = (id === currentId);
@@ -410,53 +424,55 @@ canvas.addEventListener("mousemove", (e) => {
     });
 
     if (isDragging && (dragButton === 0 || dragButton === 2)) {
-        handleInteraction(e);
+        // Only trigger interaction if we moved to a new tile
+        if (currentId !== lastInteractedId) {
+            handleInteraction(e);
+        }
     }
 });
 
 window.addEventListener("mouseup", () => {
     isDragging = false;
     dragButton = -1;
+    lastInteractedId = null;
 
-    // Release the button if we were holding one
     if (pressedButton) {
         pressedButton.release();
         pressedButton = null;
     }
 });
+
 function handleInteraction(e) {
     const rect = canvas.getBoundingClientRect();
-    // Use rect.width/height to account for CSS scaling
     const x = Math.floor((e.clientX - rect.left) / (rect.width / gridWidth));
     const y = Math.floor((e.clientY - rect.top) / (rect.height / gridHeight));
     
     if (x < 0 || x >= gridWidth || y < 0 || y >= gridHeight) return;
     const id = y * gridWidth + x;
+    lastInteractedId = id;
 
-    if (dragButton === 2) { // Right click: Always Delete
+    if (dragButton === 2) { // Right click: Delete
         if (!grid[id]) return;
         const blockToDie = grid[id]; 
         grid[id] = null;
         blockToDie.dirtyNeighbors();
     } 
-    else if (dragButton === 0) { // Left click: Interact OR Place
+    else if (dragButton === 0) { // Left click: Interact or Place
         if (grid[id] !== null) {
-            // Only interact on the initial click (don't toggle 60 times a second while dragging)
-            if (!isDragging || (isDragging && currentTool !== "wire")) {
-                grid[id].interact();
-            }
+            // Interact only once per click/tile-entry
+            grid[id].interact();
         } else {
             // Place new block
-            let newBlock;
+            let newBlock = null;
             if (currentTool === "wire") newBlock = new Wire(x, y);
-            if (currentTool === "inverter") newBlock = new Inverter(x, y, currentRotation);
-            if (currentTool === "diode") newBlock = new Diode(x, y, currentRotation);
-            if (currentTool === "bridge") newBlock = new Bridge(x, y, currentRotation);
-            if (currentTool === "switch") newBlock = new Switch(x, y);
-            if (currentTool === "button") newBlock = new Button(x, y);
-            if (currentTool === "hoverSensor") newBlock = new HoverSensor(x, y, currentRotation);
-            if (currentTool === "lamp") newBlock = new Lamp(x, y, currentRotation);
-            if (currentTool === "toggle") newBlock = new Toggle(x, y, currentRotation);
+            else if (currentTool === "inverter") newBlock = new Inverter(x, y, currentRotation);
+            else if (currentTool === "diode") newBlock = new Diode(x, y, currentRotation);
+            else if (currentTool === "bridge") newBlock = new Bridge(x, y, currentRotation);
+            else if (currentTool === "switch") newBlock = new Switch(x, y);
+            else if (currentTool === "button") newBlock = new Button(x, y);
+            else if (currentTool === "hoverSensor") newBlock = new HoverSensor(x, y, currentRotation);
+            else if (currentTool === "lamp") newBlock = new Lamp(x, y, currentRotation);
+            else if (currentTool === "toggle") newBlock = new Toggle(x, y, currentRotation);
 
             if (newBlock) {
                 grid[id] = newBlock;
@@ -872,11 +888,23 @@ function render() {
     });
 }
 
+function togglePause() {
+    isPaused = !isPaused;
+    document.getElementById("pause-btn").innerText = isPaused ? "Resume" : "Pause";
+}
+
+function step() {
+    isPaused = true; // Ensure it's paused so it doesn't run away
+    tick();
+    render();
+    document.getElementById("pause-btn").innerText = "Resume";
+}
+
 let lastTickTime = 0;
 const tickRate = 50; // 20 tps
 
 function frame(timestamp) {
-    if (timestamp - lastTickTime >= tickRate) {
+    if (!isPaused && timestamp - lastTickTime >= tickRate) {
         tick();
         lastTickTime = timestamp;
     }
