@@ -392,6 +392,15 @@ window.addEventListener("keydown", (e) => {
     if (e.key === "s" || e.key === "S") { // S to Step
         step();
     }
+    // Wire color hotkeys
+    const colorPicker = document.getElementById("wire-color");
+    if (e.key === "1") {
+        colorPicker.value = "red";
+    } else if (e.key === "2") {
+        colorPicker.value = "green";
+    } else if (e.key === "3") {
+        colorPicker.value = "blue";
+    }
     document.getElementById("rot-display").innerText = rotationNames[currentRotation];
 });
 
