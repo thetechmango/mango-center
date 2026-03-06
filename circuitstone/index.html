@@ -92,6 +92,8 @@
             <option value="green">Green Wire</option>
             <option value="blue">Blue Wire</option>
             <option value="white">White Wire</option>
+            <option value="black">Insulated Wire</option>
+
         </select>        
         <button class="tool active" data-type="wire">Wire</button>
         <button class="tool" data-type="inverter">Inverter</button>
@@ -109,8 +111,8 @@
 
         <div class="grid-controls">
             <span style="font-size: 12px; color: #888;">Grid Size:</span>
-            <button class="action-btn" onclick="resizeGrid(gridWidth + 4, gridHeight + 2)">+</button>
-            <button class="action-btn" onclick="resizeGrid(gridWidth - 4, gridHeight - 2)">-</button>
+            <button class="action-btn" onclick="resizeGrid(gridWidth + 2, gridHeight + 1)">+</button>
+            <button class="action-btn" onclick="resizeGrid(gridWidth - 2, gridHeight - 1)">-</button>
         </div>        
 
         <button onclick="exportToJSON()">Export JSON</button>

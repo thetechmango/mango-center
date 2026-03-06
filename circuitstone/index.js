@@ -200,52 +200,51 @@ class Wire extends Block {
     
                 // If it's a wire, just add it to the search queue
                 if (neighbor instanceof Wire) {
-                    // Check connection between the wire we just stepped onto (currWire) 
-                    // and the neighbor we are looking at
-                    const canConnect = (currWire.color === "white" || 
-                                        neighbor.color === "white" || 
-                                        currWire.color === neighbor.color);
-                
-                    if (canConnect) {
+                    const connects = (this.color === neighbor.color || 
+                                      this.color === "white" || 
+                                      neighbor.color === "white");
+                    if (connects) {
                         visited.add(nid);
                         queue.push(nid);
                     }
                 }
-                else if (neighbor instanceof Bridge) {
-                    // We check if the wire is at the bridge's specific lane outputs:
-                    
-                    // Lane A Output (The block the bridge's rotation points AT)
-                    const isAtOutputA = neighbor.rotation === (dir + 2) % 4;
-                    if (isAtOutputA && neighbor.powerH > 0) {
+                else if (this.color !== "black") {
+                    if (neighbor instanceof Bridge) {
+                        // We check if the wire is at the bridge's specific lane outputs:
+                        
+                        // Lane A Output (The block the bridge's rotation points AT)
+                        const isAtOutputA = neighbor.rotation === (dir + 2) % 4;
+                        if (isAtOutputA && neighbor.powerH > 0) {
+                            foundPower = true;
+                            break;
+                        }
+    
+                        // Lane B Output (The block 90deg clockwise from bridge's rotation)
+                        const isAtOutputB = ((neighbor.rotation + 1) % 4) === (dir + 2) % 4;
+                        if (isAtOutputB && neighbor.powerV > 0) {
+                            foundPower = true;
+                            break;
+                        }
+                    }
+                    else if (neighbor instanceof Switch && neighbor.power > 0) {
                         foundPower = true;
                         break;
                     }
-
-                    // Lane B Output (The block 90deg clockwise from bridge's rotation)
-                    const isAtOutputB = ((neighbor.rotation + 1) % 4) === (dir + 2) % 4;
-                    if (isAtOutputB && neighbor.powerV > 0) {
+                    else if ((neighbor instanceof Switch || neighbor instanceof Button) && neighbor.power > 0) {
+                        foundPower = true;
+                        break;
+                    } 
+                    else if (neighbor instanceof Diode ||neighbor instanceof Inverter) {
+                        const pointsAtThis = neighbor.rotation === (dir + 2) % 4;
+                        if (neighbor.power > 0 && pointsAtThis) {
+                            foundPower = true;
+                            break;
+                        }
+                    }
+                    else if (neighbor instanceof HoverSensor && neighbor.power > 0) {
                         foundPower = true;
                         break;
                     }
-                }
-                else if (neighbor instanceof Switch && neighbor.power > 0) {
-                    foundPower = true;
-                    break;
-                }
-                else if ((neighbor instanceof Switch || neighbor instanceof Button) && neighbor.power > 0) {
-                    foundPower = true;
-                    break;
-                } 
-                else if (neighbor instanceof Diode ||neighbor instanceof Inverter) {
-                    const pointsAtThis = neighbor.rotation === (dir + 2) % 4;
-                    if (neighbor.power > 0 && pointsAtThis) {
-                        foundPower = true;
-                        break;
-                    }
-                }
-                else if (neighbor instanceof HoverSensor && neighbor.power > 0) {
-                    foundPower = true;
-                    break;
                 }
             }
             if (foundPower) break;
@@ -442,6 +441,7 @@ window.addEventListener("keydown", (e) => {
     else if (e.key === "2") colorPicker.value = "green";
     else if (e.key === "3") colorPicker.value = "blue";
     else if (e.key === "4") colorPicker.value = "white";
+    else if (e.key === "5") colorPicker.value = "black";
 
     document.getElementById("rot-display").innerText = rotationNames[currentRotation];
 });
@@ -503,6 +503,24 @@ window.addEventListener("mouseup", () => {
         pressedButton = null;
     }
 });
+
+canvas.addEventListener("wheel", (e) => {
+    e.preventDefault(); // Prevent page scrolling
+
+    const colorPicker = document.getElementById("wire-color");
+    const options = Array.from(colorPicker.options);
+    let currentIndex = colorPicker.selectedIndex;
+
+    if (e.deltaY > 0) {
+        // Scroll Down: Next Color
+        currentIndex = (currentIndex + 1) % options.length;
+    } else {
+        // Scroll Up: Previous Color
+        currentIndex = (currentIndex - 1 + options.length) % options.length;
+    }
+
+    colorPicker.selectedIndex = currentIndex;
+}, { passive: false });
 
 function handleInteraction(e) {
     const rect = canvas.getBoundingClientRect();
@@ -641,8 +659,10 @@ function render() {
                 red: block.power ? "#ff4d4d" : "#441111",
                 green: block.power ? "#4dff4d" : "#114411",
                 blue: block.power ? "#4d4dff" : "#111144",
-                white: block.power ? "#ffffff" : "#555555"
+                white: block.power ? "#ffffff" : "#555555",
+                black: block.power ? "#000000" : "#000000"
             };
+            
             ctx.strokeStyle = colorMap[block.color];
             ctx.lineWidth = cellSize * 0.2;
             ctx.lineCap = "round";
