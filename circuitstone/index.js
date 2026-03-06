@@ -36,7 +36,10 @@ function exportToJSON() {
             rotation: block.rotation,
             color: block.color || null,
             power: block.power,
-            state: block.state ?? 0 // For Toggle
+            state: block.state ?? 0,
+            channel: block.channel,
+            delayAmount: block.delayAmount,
+            targetKey: block.targetKey
         };
     });
 
@@ -57,22 +60,19 @@ function importFromJSON(event) {
     reader.onload = (e) => {
         const parsed = JSON.parse(e.target.result);
         
-        // 1. Update dimensions to match the file
         gridWidth = parsed.gridWidth || 50;
         gridHeight = parsed.gridHeight || 25;
         cellSize = canvas.width / gridWidth; // Recalculate cell size for rendering
 
-        // 2. Re-initialize the grid array
         grid = new Array(gridWidth * gridHeight).fill(null);
         dirtyBlocks.clear();
 
-        // 3. Mapping string names to actual Classes
         const constructors = { 
-            Wire, Inverter, Diode, Bridge, Switch, 
-            Button, Lamp, Toggle, HoverSensor 
+            Wire, Inverter, Diode, Bridge, Switch, Button, 
+            PowerBlock, Lamp, Toggle, HoverSensor, Delay, 
+            KeyBlock, Transmitter, Receiver, Random, Trigger
         };
 
-        // 4. Rebuild the world
         parsed.data.forEach((b) => {
             if (!b) return;
             
@@ -83,8 +83,14 @@ function importFromJSON(event) {
                 
                 if (b.color) newBlock.color = b.color;
                 if (b.state !== undefined) newBlock.state = b.state;
+                if (b.channel !== undefined) newBlock.channel = b.channel;
+                if (b.targetKey !== undefined) newBlock.targetKey = b.targetKey;
+                if (b.delayAmount !== undefined) {
+                    newBlock.delayAmount = b.delayAmount;
+                    newBlock.history = new Array(b.delayAmount).fill(0);
+                }
 
-                // Place in the correct slot based on the NEW gridWidth
+                // Place in the correct slot based on the new gridWidth
                 const id = b.y * gridWidth + b.x;
                 grid[id] = newBlock;
                 dirtyBlocks.add(id);
@@ -147,7 +153,7 @@ class Block {
         const neighbor = this.getNeighbor(dir);
         if (!neighbor) return 0;
     
-        if (neighbor instanceof Wire && neighbor.color === "black") {
+        if (neighbor.color === "black") {
             return 0;
         }
 
@@ -241,7 +247,7 @@ class Wire extends Block {
                         foundPower = true;
                         break;
                     } 
-                    else if (neighbor instanceof Diode ||neighbor instanceof Inverter || neighbor instanceof Delay) {
+                    else if (neighbor instanceof Diode ||neighbor instanceof Inverter || neighbor instanceof Delay || neighbor instanceof Trigger) {
                         const pointsAtThis = neighbor.rotation === (dir + 2) % 4;
                         if (neighbor.power > 0 && pointsAtThis) {
                             foundPower = true;
@@ -252,12 +258,22 @@ class Wire extends Block {
                         foundPower = true;
                         break;
                     }
+                    else if (neighbor instanceof PowerBlock) {
+                        // Standard color matching logic
+                        const connects = (this.color === neighbor.color || 
+                                        this.color === "white" || 
+                                        neighbor.color === "white");
+                        if (connects) {
+                            foundPower = true;
+                            break;
+                        }
+                    }
                 }
             }
             if (foundPower) break;
         }
         this.power = foundPower ? 1 : 0;
-    }    
+    }
 }
 
 
@@ -552,6 +568,71 @@ class Receiver extends Block {
     }
 }
 
+class Random extends Block {
+    constructor(x, y, rotation = 0) {
+        super(x, y, rotation);
+        this.lastInput = 0;
+    }
+
+    update() {
+        const input = this.getBackNeighbor();
+        const inputPower = (input && input.power > 0) ? 1 : 0;
+
+        // Trigger on rising edge
+        if (this.lastInput === 0 && inputPower === 1) {
+            this.power = Math.random() > 0.5 ? 1 : 0;
+        }
+
+        this.lastInput = inputPower;
+
+        if (this.power !== this.lastPower) {
+            this.dirtyNeighbors();
+        }
+        
+        // If input is high, keep it awake to detect the next pulse
+        if (inputPower === 1) dirtyBlocks.add(this.y * gridWidth + this.x);
+    }
+}
+
+class Trigger extends Block {
+    constructor(x, y, rotation = 0) {
+        super(x, y, rotation);
+        this.lastInput = 0;
+    }
+
+    update() {
+        const input = this.getBackNeighbor();
+        const inputPower = (input && input.power > 0) ? 1 : 0;
+
+        // The "Rising Edge" Logic:
+        // Output is 1 ONLY on the exact frame the input flips from 0 to 1
+        this.power = (inputPower === 1 && this.lastInput === 0) ? 1 : 0;
+
+        this.lastInput = inputPower;
+
+        if (this.power !== this.lastPower) {
+            this.dirtyNeighbors();
+        }
+        
+        // Always stay awake for one extra tick if the input is high 
+        // to reset the edge detection state
+        if (inputPower === 1 || this.power === 1) {
+            dirtyBlocks.add(this.y * gridWidth + this.x);
+        }
+    }
+}
+
+class PowerBlock extends Block {
+    constructor(x, y, rotation = 0) {
+        super(x, y, rotation);
+        this.color = document.getElementById("wire-color").value;
+        this.power = 1;
+    }
+
+    update() {}
+}
+
+
 // Tool Selection
 document.querySelectorAll('.tool').forEach(btn => {
     btn.addEventListener('click', () => {
@@ -721,6 +802,7 @@ function handleInteraction(e) {
             else if (currentTool === "bridge") newBlock = new Bridge(x, y, currentRotation);
             else if (currentTool === "switch") newBlock = new Switch(x, y);
             else if (currentTool === "button") newBlock = new Button(x, y);
+            else if (currentTool === "powerBlock") newBlock = new PowerBlock(x, y, currentRotation);
             else if (currentTool === "delay") newBlock = new Delay(x, y, currentRotation);
             else if (currentTool === "hoverSensor") newBlock = new HoverSensor(x, y, currentRotation);
             else if (currentTool === "lamp") newBlock = new Lamp(x, y, currentRotation);
@@ -728,6 +810,8 @@ function handleInteraction(e) {
             else if (currentTool === "keyBlock") newBlock = new KeyBlock(x, y, currentRotation);
             else if (currentTool === "transmitter") newBlock = new Transmitter(x, y);
             else if (currentTool === "receiver") newBlock = new Receiver(x, y);
+            else if (currentTool === "random") newBlock = new Random(x, y, currentRotation);
+            else if (currentTool === "trigger") newBlock = new Trigger(x, y, currentRotation);
 
             if (newBlock) {
                 grid[id] = newBlock;
@@ -1101,17 +1185,13 @@ function render() {
             ctx.fillStyle = block.power ? "#ffffff" : "#000000";
             ctx.fillRect(-cellSize/2, -cellSize/2, cellSize, cellSize);
         
-            // Input triangle (scaled to cell size)
-            const triW = cellSize * 0.25;
-            const triH = cellSize * 0.20;
-            const offset = cellSize * 0.5;
-        
-            ctx.fillStyle = block.power ? "#ff4d4d" : "#441111";
+            // Input indicator
+            const inputColor = block.lastInput ? "#ff4d4d" : "#441111"; 
+            ctx.fillStyle = inputColor;
             ctx.beginPath();
-            ctx.moveTo(-offset + triW, 0);
-            ctx.lineTo(-offset, -triH);
-            ctx.lineTo(-offset, triH);
-            ctx.closePath();
+            ctx.moveTo(-cellSize*0.5 + cellSize*0.2, 0);
+            ctx.lineTo(-cellSize*0.5, -cellSize*0.15);
+            ctx.lineTo(-cellSize*0.5, cellSize*0.15);
             ctx.fill();
         
             ctx.restore();
@@ -1148,18 +1228,13 @@ function render() {
             ctx.fill();
             ctx.restore();
 
-            const triW = cellSize * 0.25;
-            const triH = cellSize * 0.20;
-            const offset = cellSize * 0.5;
-            
+            // Input indicator
             const inputColor = block.lastInput ? "#ff4d4d" : "#441111"; 
             ctx.fillStyle = inputColor;
-        
             ctx.beginPath();
-            ctx.moveTo(-offset + triW, 0);
-            ctx.lineTo(-offset, -triH);
-            ctx.lineTo(-offset, triH);
-            ctx.closePath();
+            ctx.moveTo(-cellSize*0.5 + cellSize*0.2, 0);
+            ctx.lineTo(-cellSize*0.5, -cellSize*0.15);
+            ctx.lineTo(-cellSize*0.5, cellSize*0.15);
             ctx.fill();
         
             ctx.restore();
@@ -1308,13 +1383,11 @@ function render() {
             ctx.save();
             ctx.translate(cx, cy);
         
-            // 1. Solid Base
             ctx.fillStyle = "#333";
             ctx.beginPath();
             ctx.roundRect(-cellSize/2, -cellSize/2, cellSize, cellSize, cellSize * 0.15);
             ctx.fill();
         
-            // 2. Receiving Frames (Squares)
             const isReceiving = wirelessChannels[block.channel] > 0;
             ctx.strokeStyle = isReceiving ? "#ff4d4d" : "#441111";
             ctx.lineWidth = cellSize * 0.05;
@@ -1326,13 +1399,100 @@ function render() {
             }
             ctx.globalAlpha = 1.0;
         
-            // 3. Central Channel Number
             ctx.fillStyle = "#fff";
             ctx.font = `bold ${cellSize * 0.5}px monospace`;
             ctx.textAlign = "center";
             ctx.textBaseline = "middle";
             ctx.fillText(block.channel, 0, 0);
         
+            ctx.restore();
+        } else if (block instanceof Random) {
+            const cx = x + cellSize / 2;
+            const cy = y + cellSize / 2;
+            ctx.save();
+            ctx.translate(cx, cy);
+            ctx.rotate((block.rotation - 1) * Math.PI / 2);
+        
+            ctx.fillStyle = "#333";
+            ctx.beginPath();
+            ctx.roundRect(-cellSize/2, -cellSize/2, cellSize, cellSize, cellSize * 0.15);
+            ctx.fill();
+        
+            ctx.fillStyle = block.power ? "#ff4d4d" : "#441111";
+            ctx.font = `bold ${cellSize * 0.6}px monospace`;
+            ctx.textAlign = "center";
+            ctx.textBaseline = "middle";
+            ctx.fillText("?", 0, 0);
+        
+            // Input indicator
+            const inputColor = block.lastInput ? "#ff4d4d" : "#441111"; 
+            ctx.fillStyle = inputColor;
+            ctx.beginPath();
+            ctx.moveTo(-cellSize*0.5 + cellSize*0.2, 0);
+            ctx.lineTo(-cellSize*0.5, -cellSize*0.15);
+            ctx.lineTo(-cellSize*0.5, cellSize*0.15);
+            ctx.fill();
+        
+            ctx.restore();
+        } else if (block instanceof Trigger) {
+            const cx = x + cellSize / 2;
+            const cy = y + cellSize / 2;
+            ctx.save();
+            ctx.translate(cx, cy);
+            ctx.rotate((block.rotation - 1) * Math.PI / 2);
+        
+            // 1. Base
+            ctx.fillStyle = "#333";
+            ctx.beginPath();
+            ctx.roundRect(-cellSize/2, -cellSize/2, cellSize, cellSize, cellSize * 0.15);
+            ctx.fill();
+        
+            // 2. Pulse Icon (The "Rising Edge" Spike)
+            ctx.strokeStyle = block.power ? "#ff4d4d" : "#441111";
+            ctx.lineWidth = cellSize * 0.1;
+            ctx.lineCap = "round";
+            ctx.lineJoin = "round";
+        
+            ctx.beginPath();
+            // Flat line -> Spike -> Flat line
+            ctx.moveTo(-cellSize * 0.3, cellSize * 0.15);
+            ctx.lineTo(-cellSize * 0.1, cellSize * 0.15);
+            ctx.lineTo(0, -cellSize * 0.25);
+            ctx.lineTo(cellSize * 0.1, cellSize * 0.15);
+            ctx.lineTo(cellSize * 0.3, cellSize * 0.15);
+            ctx.stroke();
+        
+            // Input indicator
+            const inputColor = block.lastInput ? "#ff4d4d" : "#441111"; 
+            ctx.fillStyle = inputColor;
+            ctx.beginPath();
+            ctx.moveTo(-cellSize*0.5 + cellSize*0.2, 0);
+            ctx.lineTo(-cellSize*0.5, -cellSize*0.15);
+            ctx.lineTo(-cellSize*0.5, cellSize*0.15);
+            ctx.fill();
+        
+            ctx.restore();
+        } else if (block instanceof PowerBlock) {
+            const cx = x + cellSize / 2;
+            const cy = y + cellSize / 2;
+
+            const colorMap = {
+                red: block.power ? "#ff4d4d" : "#441111",
+                green: block.power ? "#4dff4d" : "#114411",
+                blue: block.power ? "#4d4dff" : "#111144",
+                white: block.power ? "#ffffff" : "#555555",
+                black: block.power ? "#000000" : "#000000"
+            };
+
+            ctx.save();
+            ctx.translate(cx, cy);
+            ctx.rotate((block.rotation - 1) * Math.PI / 2);
+            
+            ctx.fillStyle = colorMap[block.color] || "ff4d4d";
+            ctx.beginPath();
+            ctx.roundRect(-cellSize/2, -cellSize/2, cellSize, cellSize, cellSize * 0.15);
+            ctx.fill();
+
             ctx.restore();
         }
     });

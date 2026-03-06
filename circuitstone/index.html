@@ -2,7 +2,7 @@
 <html>
 
 <head>
-    <title>Circuitstone</title>
+    <title>CircuitStone</title>
     <link rel="icon" type="image/png" href="favicon.png">
     <style>
         body {
@@ -17,9 +17,9 @@
             border-radius: 5px;
 
             position: fixed;
-            top: 50%;
+            bottom: 20px;
             left: 50%;
-            transform: translate(-50%, -50%);
+            transform: translate(-50%);
 
             height: 80vh;
             aspect-ratio: 2/1;
@@ -28,7 +28,6 @@
         #toolbar {
             position: fixed;   
             width: 97vw;
-            height: 40px;
             top: 20px;
             left: 50%;
             transform: translateX(-50%);
@@ -36,6 +35,8 @@
             padding: 10px;
             border-radius: 8px;
             display: flex;
+            flex-flow: row wrap;
+            justify-content: flex-start;
             gap: 10px;
             border: 2px solid #104010;
             color: white;
@@ -87,7 +88,7 @@
 
 <body>
     <div id="toolbar">
-        <select id="wire-color" class="action-btn">
+        <select id="wire-color" class="action-btn" title="Red, green, and blue wires do not interfere. White wires connect all wire types. Insulated wires do not power or get powered by components, and only connects to white wires. Also determines the color of power blocks.">
             <option value="red">Red Wire</option>
             <option value="green">Green Wire</option>
             <option value="blue">Blue Wire</option>
@@ -95,19 +96,22 @@
             <option value="black">Insulated Wire</option>
 
         </select>        
-        <button class="tool active" data-type="wire">Wire</button>
-        <button class="tool" data-type="inverter">Inverter</button>
-        <button class="tool" data-type="diode">Diode</button>
-        <button class="tool" data-type="bridge">Bridge</button>
-        <button class="tool" data-type="switch">Switch</button>
-        <button class="tool" data-type="button">Button</button>
-        <button class="tool" data-type="delay">Delay</button>
-        <button class="tool" data-type="hoverSensor">Hover Sensor</button>
-        <button class="tool" data-type="lamp">Lamp</button>
-        <button class="tool" data-type="toggle">Toggle</button>
-        <button class="tool" data-type="keyBlock">Key Block</button>
-        <button class="tool" data-type="transmitter">Transmitter</button>
-        <button class="tool" data-type="receiver">Receiver</button>
+        <button class="tool active" data-type="wire" title="Used to carry signals across distances.">Wire</button>
+        <button class="tool" data-type="inverter" title="Inverts the signal. Equivalent to a NOT gate.">Inverter</button>
+        <button class="tool" data-type="diode" title="Only lets the signal flow one way. Most of these components do this, but i made this anyway.">Diode</button>
+        <button class="tool" data-type="bridge" title="Lets signals cross each other without interfering.">Bridge</button>
+        <button class="tool" data-type="switch" title="Click to toggle this on or off.">Switch</button>
+        <button class="tool" data-type="button" title="Hold click to keep the button on">Button</button>
+        <button class="tool" data-type="powerBlock" title="Provides a constant signal. Can be different colors.">Power Block</button>
+        <button class="tool" data-type="delay"  title="Delays the signal by a certain number of ticks.">Delay</button>
+        <button class="tool" data-type="hoverSensor" title="Hover your cursor over this block to activate.">Hover Sensor</button>
+        <button class="tool" data-type="lamp" title="Turns white when powered.">Lamp</button>
+        <button class="tool" data-type="toggle" title="Toggles when activated by a signal. Equivalent to a T Flip Flop">Toggle</button>
+        <button class="tool" data-type="keyBlock" title="Activates when a certain key is pressed. Click on it to bind the key.">Key Block</button>
+        <button class="tool" data-type="transmitter" title="Transmits a signal onto a channel. Click to cycle channels.">Transmitter</button>
+        <button class="tool" data-type="receiver" title="Activated when a transmitter activates a channel. Click to cycle channels.">Receiver</button>
+        <button class="tool" data-type="random" title="Turns on or off randomly when activated.">Random</button>
+        <button class="tool" data-type="trigger" title="Activates for one tick when the input turns on. Eequivalent to a rising edge detector.">Trigger</button>
         <div class="info">Rotation: <span id="rot-display">Right</span></div>
 
         <button id="pause-btn" class="action-btn" onclick="togglePause()">Pause</button>
