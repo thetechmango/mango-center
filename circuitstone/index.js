@@ -21,6 +21,8 @@ let lastInteractedId = null;
 
 let isPaused = false;
 
+const colorPicker = document.getElementById("wire-color");
+
 function exportToJSON() {
     const data = grid.map(block => {
         if (!block) return null;
@@ -142,22 +144,22 @@ class Block {
         const neighbor = this.getNeighbor(dir);
         if (!neighbor) return 0;
     
+        if (neighbor instanceof Wire && neighbor.color === "black") {
+            return 0;
+        }
+    
         if (neighbor instanceof Bridge) {
-            // dir is the direction from this block to the bridge.
-            // We need to know which lane of the bridge points at us.
-            
             const isAtOutputA = neighbor.rotation === (dir + 2) % 4;
             if (isAtOutputA) return neighbor.powerH;
     
             const isAtOutputB = ((neighbor.rotation + 1) % 4) === (dir + 2) % 4;
             if (isAtOutputB) return neighbor.powerV;
     
-            return 0; // Not at an output
+            return 0;
         }
     
-        // Default: just return the standard power
         return neighbor.power;
-    }    
+    }
 
     prepareNextTick() {
         this.lastPower = this.power;
@@ -438,7 +440,6 @@ window.addEventListener("keydown", (e) => {
         step();
     }
     // Wire color hotkeys
-    const colorPicker = document.getElementById("wire-color");
     if (e.key === "1") colorPicker.value = "red";
     else if (e.key === "2") colorPicker.value = "green";
     else if (e.key === "3") colorPicker.value = "blue";
@@ -507,22 +508,31 @@ window.addEventListener("mouseup", () => {
 });
 
 canvas.addEventListener("wheel", (e) => {
-    e.preventDefault(); // Prevent page scrolling
+    e.preventDefault();
 
-    const colorPicker = document.getElementById("wire-color");
-    const options = Array.from(colorPicker.options);
-    let currentIndex = colorPicker.selectedIndex;
+    const tools = Array.from(document.querySelectorAll('.tool'));
+    const currentActive = document.querySelector('.tool.active');
+    let currentIndex = tools.indexOf(currentActive);
 
     if (e.deltaY > 0) {
-        // Scroll Down: Next Color
-        currentIndex = (currentIndex + 1) % options.length;
+        currentIndex = Math.min(currentIndex + 1, tools.length - 1);
     } else {
-        // Scroll Up: Previous Color
-        currentIndex = (currentIndex - 1 + options.length) % options.length;
+        currentIndex = Math.max(currentIndex - 1, 0);
     }
 
-    colorPicker.selectedIndex = currentIndex;
+    const newToolBtn = tools[currentIndex];
+    newToolBtn.click();
 }, { passive: false });
+
+colorPicker.addEventListener("change", () => {
+    // Automatically switch to wire tool when a color is picked
+    currentTool = "wire";
+    
+    document.querySelectorAll('.tool').forEach(btn => {
+        btn.classList.remove('active');
+        if (btn.dataset.type === "wire") btn.classList.add('active');
+    });
+});
 
 function handleInteraction(e) {
     const rect = canvas.getBoundingClientRect();
@@ -696,7 +706,7 @@ function render() {
                     block.color === neighbor.n.color
                 );
                 
-                const isComponent = !isWire; 
+                const isComponent = !isWire && (block.color !== "black"); 
                 if (connects || isComponent) {
                     ctx.beginPath();
                     ctx.moveTo(centerX, centerY);
