@@ -18,6 +18,7 @@ let isDragging = false;
 let dragButton = -1;
 let pressedButton = null;
 let lastInteractedId = null;
+const keysDown = new Set();
 
 let isPaused = false;
 
@@ -147,7 +148,7 @@ class Block {
         if (neighbor instanceof Wire && neighbor.color === "black") {
             return 0;
         }
-    
+
         if (neighbor instanceof Bridge) {
             const isAtOutputA = neighbor.rotation === (dir + 2) % 4;
             if (isAtOutputA) return neighbor.powerH;
@@ -214,9 +215,9 @@ class Wire extends Block {
                 }
                 else if (currWire.color !== "black") {
                     if (neighbor instanceof Bridge) {
-                        // We check if the wire is at the bridge's specific lane outputs:
+                        // check if the wire is at the bridge's specific lane outputs:
                         
-                        // Lane A Output (The block the bridge's rotation points AT)
+                        // Lane A Output (The block the bridge's rotation points at)
                         const isAtOutputA = neighbor.rotation === (dir + 2) % 4;
                         if (isAtOutputA && neighbor.powerH > 0) {
                             foundPower = true;
@@ -238,7 +239,7 @@ class Wire extends Block {
                         foundPower = true;
                         break;
                     } 
-                    else if (neighbor instanceof Diode ||neighbor instanceof Inverter) {
+                    else if (neighbor instanceof Diode ||neighbor instanceof Inverter || neighbor instanceof Delay) {
                         const pointsAtThis = neighbor.rotation === (dir + 2) % 4;
                         if (neighbor.power > 0 && pointsAtThis) {
                             foundPower = true;
@@ -246,6 +247,10 @@ class Wire extends Block {
                         }
                     }
                     else if (neighbor instanceof HoverSensor && neighbor.power > 0) {
+                        foundPower = true;
+                        break;
+                    }
+                    else if (neighbor instanceof Delay && neighbor.power > 0) {
                         foundPower = true;
                         break;
                     }
@@ -413,6 +418,87 @@ class HoverSensor extends Block {
     interact() {}
 }
 
+class Delay extends Block {
+    constructor(x, y, rotation = 0) {
+        super(x, y, rotation);
+        this.delayAmount = 1;
+        this.history = new Array(this.delayAmount).fill(0);
+    }
+
+    interact() {
+        const options = [1, 2, 3, 4];
+        let idx = options.indexOf(this.delayAmount);
+        this.delayAmount = options[(idx + 1) % options.length];
+        
+        // Resize history and fill with 0s
+        this.history = new Array(this.delayAmount).fill(0);
+        this.dirtyNeighbors();
+    }
+
+    update() {
+        const input = this.getBackNeighbor();
+        const inputPower = (input && input.power > 0) ? 1 : 0;
+    
+        // 1. Peek at what the output WILL be
+        const nextOutput = this.history[this.history.length - 1];
+    
+        // 2. Logic: Should we stay "awake"?
+        // - Stay awake if the internal history isn't uniform yet
+        // - OR if the input is currently high (filling the buffer)
+        // - OR if the output is about to change state (the final exit)
+        const isMoving = this.history.some(state => state !== inputPower);
+        const willChange = nextOutput !== this.power;
+    
+        // 3. Perform the shift
+        this.history.unshift(inputPower);
+        this.power = this.history.pop();
+    
+        // 4. Dirtying logic
+        // We check willChange OR isMoving OR if we just changed (powerChanged)
+        if (isMoving || willChange || this.power !== this.lastPower) {
+            dirtyBlocks.add(this.y * gridWidth + this.x);
+            this.dirtyNeighbors();
+        }
+    }    
+}
+
+class KeyBlock extends Block {
+    constructor(x, y, rotation = 0) {
+        super(x, y, rotation);
+        this.targetKey = "F"; // Default to F
+        this.isBinding = false; // waiting for a key press
+    }
+
+    interact() {
+        // Enter "Binding Mode"
+        this.isBinding = true;
+        dirtyBlocks.add(this.y * gridWidth + this.x);
+        
+        // Listen for the NEXT key press globally
+        const listener = (e) => {
+            e.preventDefault();
+            this.targetKey = e.key.toUpperCase();
+            this.isBinding = false;
+            window.removeEventListener("keydown", listener);
+            dirtyBlocks.add(this.y * gridWidth + this.x);
+            render();
+        };
+        window.addEventListener("keydown", listener);
+    }
+
+    update() {
+        // Check if its specific key is currently held down in your global keys set
+        const isPressed = keysDown.has(this.targetKey) || keysDown.has(this.targetKey.toLowerCase());
+        this.power = isPressed ? 1 : 0;
+
+        if (this.power !== this.lastPower) {
+            this.dirtyNeighbors();
+        }
+        
+        // Keep it "awake" while binding so the UI updates
+        if (this.isBinding) dirtyBlocks.add(this.y * gridWidth + this.x);
+    }
+}
 
 
 // Tool Selection
@@ -426,6 +512,16 @@ document.querySelectorAll('.tool').forEach(btn => {
 
 // Hotkeys for Rotation
 window.addEventListener("keydown", (e) => {
+    {
+        const key = e.key.toUpperCase();
+        if (!keysDown.has(key)) {
+            keysDown.add(key);
+            // wake up all keyblocks
+            grid.forEach((block, id) => {
+                if (block instanceof KeyBlock) dirtyBlocks.add(id);
+            });
+        }
+    }
     const key = e.key.toLowerCase();
     if (key === 'e') { // CW
         currentRotation = (currentRotation + 1) % 4;
@@ -436,17 +532,26 @@ window.addEventListener("keydown", (e) => {
         e.preventDefault(); // Stop page scrolling
         togglePause();
     }
-    if (e.key === "s" || e.key === "S") { // S to Step
+    if (key === "s" || e.key === "S") { // S to Step
         step();
     }
     // Wire color hotkeys
-    if (e.key === "1") colorPicker.value = "red";
-    else if (e.key === "2") colorPicker.value = "green";
-    else if (e.key === "3") colorPicker.value = "blue";
-    else if (e.key === "4") colorPicker.value = "white";
-    else if (e.key === "5") colorPicker.value = "black";
+    if (key === "1") colorPicker.value = "red";
+    else if (key === "2") colorPicker.value = "green";
+    else if (key === "3") colorPicker.value = "blue";
+    else if (key === "4") colorPicker.value = "white";
+    else if (key === "5") colorPicker.value = "black";
 
     document.getElementById("rot-display").innerText = rotationNames[currentRotation];
+});
+
+window.addEventListener("keyup", (e) => {
+    const key = e.key.toUpperCase();
+    keysDown.delete(key);
+    // wake up all keyblocks
+    grid.forEach((block, id) => {
+        if (block instanceof KeyBlock) dirtyBlocks.add(id);
+    });
 });
 
 canvas.addEventListener("mousedown", (e) => {
@@ -565,9 +670,11 @@ function handleInteraction(e) {
             else if (currentTool === "bridge") newBlock = new Bridge(x, y, currentRotation);
             else if (currentTool === "switch") newBlock = new Switch(x, y);
             else if (currentTool === "button") newBlock = new Button(x, y);
+            else if (currentTool === "delay") newBlock = new Delay(x, y, currentRotation);
             else if (currentTool === "hoverSensor") newBlock = new HoverSensor(x, y, currentRotation);
             else if (currentTool === "lamp") newBlock = new Lamp(x, y, currentRotation);
             else if (currentTool === "toggle") newBlock = new Toggle(x, y, currentRotation);
+            else if (currentTool === "keyBlock") newBlock = new KeyBlock(x, y, currentRotation);
 
             if (newBlock) {
                 grid[id] = newBlock;
@@ -947,43 +1054,40 @@ function render() {
         
             ctx.save();
             ctx.translate(cx, cy);
+            // Base rotation for the block direction
             ctx.rotate((block.rotation - 1) * Math.PI / 2);
         
             // Full tile rounded base
             ctx.fillStyle = "#333";
             ctx.beginPath();
-            ctx.roundRect(
-                -cellSize/2,
-                -cellSize/2,
-                cellSize,
-                cellSize,
-                cellSize * 0.15 // corner radius
-            );
+            ctx.roundRect(-cellSize/2, -cellSize/2, cellSize, cellSize, cellSize * 0.15);
             ctx.fill();
-        
-            // Cross indicator
+
+            ctx.save();
+            ctx.rotate(Math.PI / 4); // Rotate 45 degrees to make it an X
+            
             const barLen = cellSize * 0.35;
             const barThick = cellSize * 0.18;
-            const color = block.power ? "#ff4d4d" : "#441111";
+            const stateColor = block.power ? "#ff4d4d" : "#441111";
+            ctx.fillStyle = stateColor;
         
-            ctx.fillStyle = color;
-        
-            // Horizontal bar
+            // Horizontal bar of the X
             ctx.beginPath();
             ctx.roundRect(-barLen, -barThick/2, barLen*2, barThick, barThick/2);
             ctx.fill();
-        
-            // Vertical bar
+            // Vertical bar of the X
             ctx.beginPath();
             ctx.roundRect(-barThick/2, -barLen, barThick, barLen*2, barThick/2);
             ctx.fill();
-        
-            // Input triangle
+            ctx.restore();
+
             const triW = cellSize * 0.25;
             const triH = cellSize * 0.20;
             const offset = cellSize * 0.5;
+            
+            const inputColor = block.lastInput ? "#ff4d4d" : "#441111"; 
+            ctx.fillStyle = inputColor;
         
-            ctx.fillStyle = color;
             ctx.beginPath();
             ctx.moveTo(-offset + triW, 0);
             ctx.lineTo(-offset, -triH);
@@ -1021,7 +1125,88 @@ function render() {
             ctx.stroke();
         
             ctx.restore();
-        }          
+        } else if (block instanceof Delay) {
+            const cx = x + cellSize / 2;
+            const cy = y + cellSize / 2;
+            ctx.save();
+            ctx.translate(cx, cy);
+            ctx.rotate((block.rotation - 1) * Math.PI / 2);
+        
+            // Full tile rounded base
+            ctx.fillStyle = "#333";
+            ctx.beginPath();
+            ctx.roundRect(-cellSize/2, -cellSize/2, cellSize, cellSize, cellSize * 0.15);
+            ctx.fill();
+        
+            // --- Balanced Segment Math ---
+            const gap = 3; 
+            const margin = gap / 2; 
+            const segWidth = (cellSize - (gap * block.delayAmount)) / block.delayAmount;
+            const startX = -cellSize / 2 + margin;
+        
+            block.history.forEach((state, i) => {
+                const xPos = startX + i * (segWidth + gap);
+            
+                // --- TRAPEZOID MATH ---
+                // Calculate heights for the LEFT and RIGHT side of this specific segment
+                const leftPct = i / block.delayAmount;
+                const rightPct = (i + 1) / block.delayAmount;
+                
+                // Taper from 0.7 (Input side) down to 0.2 (Output side)
+                const hLeft = cellSize * (0.7 - (leftPct * 0.5));
+                const hRight = cellSize * (0.7 - (rightPct * 0.5));
+            
+                const drawSegment = () => {
+                    ctx.beginPath();
+                    // Top Left
+                    ctx.moveTo(xPos, -hLeft / 2);
+                    // Top Right
+                    ctx.lineTo(xPos + segWidth, -hRight / 2);
+                    // Bottom Right
+                    ctx.lineTo(xPos + segWidth, hRight / 2);
+                    // Bottom Left
+                    ctx.lineTo(xPos, hLeft / 2);
+                    ctx.closePath();
+                    ctx.fill();
+                };
+            
+                // 1. Inactive Slot
+                ctx.fillStyle = "#441111"; 
+                drawSegment();
+            
+                // 2. Active Segment (Solid High-Contrast)
+                if (state) {
+                    ctx.fillStyle = "#ff4d4d"; 
+                    drawSegment();
+                }
+            });            
+        
+            ctx.restore();
+        } else if (block instanceof KeyBlock) {
+            const cx = x + cellSize / 2;
+            const cy = y + cellSize / 2;
+            ctx.save();
+        
+            ctx.translate(cx, cy);
+            ctx.rotate((block.rotation - 1) * Math.PI / 2);
+            
+            ctx.beginPath();
+            ctx.fillStyle = block.isBinding ? "#fff" : "#333";
+            ctx.roundRect(-cellSize/2, -cellSize/2, cellSize, cellSize, cellSize * 0.15);
+            ctx.fill();
+        
+            ctx.fillStyle = block.power ? "#ff4d4d" : (block.isBinding ? "#000" : "#441111");
+            ctx.font = `bold ${cellSize * 0.4}px monospace`;
+            ctx.textAlign = "center";
+            ctx.textBaseline = "middle";
+            
+            let displayKey = block.isBinding ? "?" : (block.targetKey || "?");
+            if (displayKey === " ") displayKey = "SPC";
+            
+            ctx.fillText(displayKey, 0, 0);
+        
+            ctx.restore();
+        }
     });
 }
 
