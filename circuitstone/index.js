@@ -439,10 +439,11 @@ class Delay extends Block {
         this.history = new Array(this.delayAmount).fill(0);
     }
 
-    interact() {
+    interact(e) {
         const options = [1, 2, 3, 4];
+        const step = (e && e.shiftKey) ? -1 : 1;
         let idx = options.indexOf(this.delayAmount);
-        this.delayAmount = options[(idx + 1) % options.length];
+        this.delayAmount = options[(idx + step + options.length) % options.length];
         
         // Resize history and fill with 0s
         this.history = new Array(this.delayAmount).fill(0);
@@ -520,8 +521,9 @@ class Transmitter extends Block {
         this.channel = 0;
     }
 
-    interact() {
-        this.channel = (this.channel + 1) % 10; // Cycle channels 0-9
+    interact(e) {
+        const step = (e && e.shiftKey) ? -1 : 1;
+        this.channel = (this.channel + step + 100) % 100; // Cycle channels 0-99
         render();
     }
 
@@ -553,8 +555,9 @@ class Receiver extends Block {
         this.channel = 0;
     }
 
-    interact() {
-        this.channel = (this.channel + 1) % 10;
+    interact(e) {
+        const step = (e && e.shiftKey) ? -1 : 1;
+        this.channel = (this.channel + step + 100) % 100;
         render();
     }
 
@@ -789,7 +792,7 @@ function handleInteraction(e) {
     else if (dragButton === 0) { // Left click: Interact or Place
         if (grid[id] !== null) {
             // Interact only once per click/tile-entry
-            grid[id].interact();
+            grid[id].interact(e);
         } else {
             // Place new block
             let newBlock = null;
