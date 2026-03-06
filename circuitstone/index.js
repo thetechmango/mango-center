@@ -200,15 +200,17 @@ class Wire extends Block {
     
                 // If it's a wire, just add it to the search queue
                 if (neighbor instanceof Wire) {
-                    const connects = (this.color === neighbor.color || 
-                                      this.color === "white" || 
-                                      neighbor.color === "white");
+                    const connects = (
+                        currWire.color === neighbor.color || 
+                        currWire.color === "white" || 
+                        neighbor.color === "white"
+                    );
                     if (connects) {
                         visited.add(nid);
                         queue.push(nid);
                     }
                 }
-                else if (this.color !== "black") {
+                else if (currWire.color !== "black") {
                     if (neighbor instanceof Bridge) {
                         // We check if the wire is at the bridge's specific lane outputs:
                         
