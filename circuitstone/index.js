@@ -20,6 +20,8 @@ let pressedButton = null;
 let lastInteractedId = null;
 const keysDown = new Set();
 
+let wirelessChannels = {}; 
+
 let isPaused = false;
 
 const colorPicker = document.getElementById("wire-color");
@@ -247,10 +249,6 @@ class Wire extends Block {
                         }
                     }
                     else if (neighbor instanceof HoverSensor && neighbor.power > 0) {
-                        foundPower = true;
-                        break;
-                    }
-                    else if (neighbor instanceof Delay && neighbor.power > 0) {
                         foundPower = true;
                         break;
                     }
@@ -500,6 +498,59 @@ class KeyBlock extends Block {
     }
 }
 
+class Transmitter extends Block {
+    constructor(x, y, rotation = 0) {
+        super(x, y, rotation);
+        this.channel = 0;
+    }
+
+    interact() {
+        this.channel = (this.channel + 1) % 10; // Cycle channels 0-9
+        render();
+    }
+
+    update() {
+        let locallyPowered = false;
+    
+        // Check all 4 neighbors for input
+        for (let i = 0; i < 4; i++) {
+            if (this.getNeighborPower(i) > 0) {
+                locallyPowered = true;
+                break;
+            }
+        }
+    
+        // For renderer only
+        this.isTransmitting = locallyPowered;
+    
+        if (locallyPowered) {
+            wirelessChannels[this.channel] = 1;
+        }
+        
+        this.power = 0; 
+    }    
+}
+
+class Receiver extends Block {
+    constructor(x, y, rotation = 0) {
+        super(x, y, rotation);
+        this.channel = 0;
+    }
+
+    interact() {
+        this.channel = (this.channel + 1) % 10;
+        render();
+    }
+
+    update() {
+        // Read from the global bus
+        this.power = wirelessChannels[this.channel] || 0;
+
+        if (this.power !== this.lastPower) {
+            this.dirtyNeighbors();
+        }
+    }
+}
 
 // Tool Selection
 document.querySelectorAll('.tool').forEach(btn => {
@@ -675,6 +726,8 @@ function handleInteraction(e) {
             else if (currentTool === "lamp") newBlock = new Lamp(x, y, currentRotation);
             else if (currentTool === "toggle") newBlock = new Toggle(x, y, currentRotation);
             else if (currentTool === "keyBlock") newBlock = new KeyBlock(x, y, currentRotation);
+            else if (currentTool === "transmitter") newBlock = new Transmitter(x, y);
+            else if (currentTool === "receiver") newBlock = new Receiver(x, y);
 
             if (newBlock) {
                 grid[id] = newBlock;
@@ -714,6 +767,20 @@ canvas.addEventListener("contextmenu", e => e.preventDefault());
 
 
 function tick() {
+    wirelessChannels = {};
+
+    grid.forEach((block) => {
+        if (block instanceof Transmitter) {
+            block.update(); 
+        }
+    });
+
+    grid.forEach((block, id) => {
+        if (block instanceof Receiver) {
+            dirtyBlocks.add(id);
+        }
+    });
+
     if (dirtyBlocks.size === 0) return;
 
     let toProcess = new Set(dirtyBlocks);
@@ -1204,6 +1271,67 @@ function render() {
             if (displayKey === " ") displayKey = "SPC";
             
             ctx.fillText(displayKey, 0, 0);
+        
+            ctx.restore();
+        } else if (block instanceof Transmitter) {
+            const cx = x + cellSize / 2;
+            const cy = y + cellSize / 2;
+            ctx.save();
+            ctx.translate(cx, cy);
+        
+            ctx.fillStyle = "#333";
+            ctx.beginPath();
+            ctx.roundRect(-cellSize/2, -cellSize/2, cellSize, cellSize, cellSize * 0.15);
+            ctx.fill();
+        
+            // ONLY glow if THIS specific block is powered
+            const active = block.isTransmitting;
+            ctx.strokeStyle = active ? "#ff4d4d" : "#441111";
+            ctx.lineWidth = cellSize * 0.05;
+        
+            for(let i = 1; i <= 3; i++) {
+                ctx.beginPath();
+                ctx.arc(0, 0, (cellSize * 0.1) + (i * cellSize * 0.12), 0, Math.PI * 2);
+                ctx.stroke();
+            }
+        
+            ctx.fillStyle = "#fff";
+            ctx.font = `bold ${cellSize * 0.5}px monospace`;
+            ctx.textAlign = "center";
+            ctx.textBaseline = "middle";
+            ctx.fillText(block.channel, 0, 0);
+        
+            ctx.restore();
+        } else if (block instanceof Receiver) {
+            const cx = x + cellSize / 2;
+            const cy = y + cellSize / 2;
+            ctx.save();
+            ctx.translate(cx, cy);
+        
+            // 1. Solid Base
+            ctx.fillStyle = "#333";
+            ctx.beginPath();
+            ctx.roundRect(-cellSize/2, -cellSize/2, cellSize, cellSize, cellSize * 0.15);
+            ctx.fill();
+        
+            // 2. Receiving Frames (Squares)
+            const isReceiving = wirelessChannels[block.channel] > 0;
+            ctx.strokeStyle = isReceiving ? "#ff4d4d" : "#441111";
+            ctx.lineWidth = cellSize * 0.05;
+        
+            for(let i = 1; i <= 3; i++) {
+                const s = (cellSize * 0.25) + (i * cellSize * 0.15);
+                ctx.globalAlpha = 1.0 - (i * 0.2);
+                ctx.strokeRect(-s/2, -s/2, s, s);
+            }
+            ctx.globalAlpha = 1.0;
+        
+            // 3. Central Channel Number
+            ctx.fillStyle = "#fff";
+            ctx.font = `bold ${cellSize * 0.5}px monospace`;
+            ctx.textAlign = "center";
+            ctx.textBaseline = "middle";
+            ctx.fillText(block.channel, 0, 0);
         
             ctx.restore();
         }
