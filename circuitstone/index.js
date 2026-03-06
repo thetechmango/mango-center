@@ -143,14 +143,12 @@ class Block {
         if (!neighbor) return 0;
     
         if (neighbor instanceof Bridge) {
-            // 'dir' is the direction FROM this block TO the bridge.
-            // We need to know which lane of the bridge points at US.
+            // dir is the direction from this block to the bridge.
+            // We need to know which lane of the bridge points at us.
             
-            // Is our block at the Bridge's Lane A Output?
             const isAtOutputA = neighbor.rotation === (dir + 2) % 4;
             if (isAtOutputA) return neighbor.powerH;
     
-            // Is our block at the Bridge's Lane B Output?
             const isAtOutputB = ((neighbor.rotation + 1) % 4) === (dir + 2) % 4;
             if (isAtOutputB) return neighbor.powerV;
     
@@ -552,6 +550,10 @@ function handleInteraction(e) {
 }
 
 function resizeGrid(newW, newH) {
+    // Prevent shrinking to 0
+    newW = Math.max(1, newW);
+    newH = Math.max(1, newH);
+
     let newGrid = new Array(newW * newH).fill(null);
     
     grid.forEach((block) => {
@@ -565,6 +567,9 @@ function resizeGrid(newW, newH) {
     gridHeight = newH;
     grid = newGrid;
     cellSize = canvas.width / gridWidth;
+    
+    grid.forEach((b, i) => { if (b) dirtyBlocks.add(i); });
+    
     render();
 }
 
