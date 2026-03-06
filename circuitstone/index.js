@@ -22,6 +22,9 @@ const keysDown = new Set();
 
 let wirelessChannels = {}; 
 
+const NOTE_NAMES = ["C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"];
+const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+
 let isPaused = false;
 
 const colorPicker = document.getElementById("wire-color");
@@ -39,7 +42,8 @@ function exportToJSON() {
             state: block.state ?? 0,
             channel: block.channel,
             delayAmount: block.delayAmount,
-            targetKey: block.targetKey
+            targetKey: block.targetKey,
+            noteIndex: block.noteIndex
         };
     });
 
@@ -70,7 +74,7 @@ function importFromJSON(event) {
         const constructors = { 
             Wire, Inverter, Diode, Bridge, Switch, Button, 
             PowerBlock, Lamp, Toggle, HoverSensor, Delay, 
-            KeyBlock, Transmitter, Receiver, Random, Trigger
+            KeyBlock, Transmitter, Receiver, Random, Trigger, NoteBlock
         };
 
         parsed.data.forEach((b) => {
@@ -101,6 +105,31 @@ function importFromJSON(event) {
         render();
     };
     reader.readAsText(file);
+}
+
+function getNoteInfo(index) {
+    const octave = Math.floor(index / 12) + 4;
+    const name = NOTE_NAMES[index % 12];
+    const freq = 261.63 * Math.pow(2, index / 12); // Base C4 is 261.63Hz
+    return { name: `${name}${octave}`, freq };
+}
+
+function playNote(freq) {
+    if (audioCtx.state === 'suspended') audioCtx.resume();
+    const osc = audioCtx.createOscillator();
+    const gain = audioCtx.createGain();
+    
+    osc.type = 'sine';
+    osc.frequency.setValueAtTime(freq, audioCtx.currentTime);
+    
+    gain.gain.setValueAtTime(0.1, audioCtx.currentTime);
+    gain.gain.exponentialRampToValueAtTime(0.0001, audioCtx.currentTime + 0.5);
+    
+    osc.connect(gain);
+    gain.connect(audioCtx.destination);
+    
+    osc.start();
+    osc.stop(audioCtx.currentTime + 0.5);
 }
 
 class Block {
@@ -635,6 +664,87 @@ class PowerBlock extends Block {
     update() {}
 }
 
+class NoteBlock extends Block {
+    constructor(x, y, rotation = 0) {
+        super(x, y, rotation);
+        this.noteIndex = 0;
+        this.activeOsc = null;
+        this.activeGain = null;
+        this.lastInput = 0;
+    }
+
+    // Helper to start the sound
+    startSound() {
+        this.stopSound(); // Safety clear
+        if (audioCtx.state === 'suspended') audioCtx.resume();
+
+        const info = getNoteInfo(this.noteIndex);
+        this.activeOsc = audioCtx.createOscillator();
+        this.activeGain = audioCtx.createGain();
+
+        this.activeOsc.type = 'sine';
+        this.activeOsc.frequency.setValueAtTime(info.freq, audioCtx.currentTime);
+        
+        // Instant start, but smooth 0.05s ramp to avoid "popping"
+        this.activeGain.gain.setValueAtTime(0, audioCtx.currentTime);
+        this.activeGain.gain.linearRampToValueAtTime(0.1, audioCtx.currentTime + 0.05);
+
+        this.activeOsc.connect(this.activeGain);
+        this.activeGain.connect(audioCtx.destination);
+        this.activeOsc.start();
+    }
+
+    // Helper to stop with a short fade-out
+    stopSound() {
+        if (this.activeOsc && this.activeGain) {
+            const release = 0.1; // 100ms fade out
+            this.activeGain.gain.cancelScheduledValues(audioCtx.currentTime);
+            this.activeGain.gain.setValueAtTime(this.activeGain.gain.value, audioCtx.currentTime);
+            this.activeGain.gain.linearRampToValueAtTime(0, audioCtx.currentTime + release);
+            
+            const osc = this.activeOsc;
+            setTimeout(() => osc.stop(), release * 1000);
+            
+            this.activeOsc = null;
+            this.activeGain = null;
+        }
+    }
+
+    interact(e) {
+        const step = (e && e.shiftKey) ? -1 : 1;
+        this.noteIndex = (this.noteIndex + step + 37) % 37; // 3 Octaves (0-36)
+        
+        // Brief preview: Play and then stop after 300ms
+        this.startSound();
+        setTimeout(() => this.stopSound(), 300);
+        render();
+    }
+
+    onDelete() {
+        this.stopSound();
+    }    
+
+    update() {
+        const input = this.getBackNeighbor();
+        const inputPower = (input && input.power > 0) ? 1 : 0;
+
+        // Start on Rising Edge
+        if (inputPower === 1 && this.lastInput === 0) {
+            this.startSound();
+        } 
+        // Stop on Falling Edge
+        else if (inputPower === 0 && this.lastInput === 1) {
+            this.stopSound();
+        }
+
+        this.lastInput = inputPower;
+        this.power = inputPower;
+
+        if (this.power !== this.lastPower) this.dirtyNeighbors();
+        // Keep it "awake" while powered to ensure it can detect the shut-off
+        if (inputPower === 1) dirtyBlocks.add(this.y * gridWidth + this.x);
+    }
+}
 
 // Tool Selection
 document.querySelectorAll('.tool').forEach(btn => {
@@ -785,7 +895,12 @@ function handleInteraction(e) {
 
     if (dragButton === 2) { // Right click: Delete
         if (!grid[id]) return;
-        const blockToDie = grid[id]; 
+        const blockToDie = grid[id];
+
+        if (typeof grid[id].onDelete === 'function') {
+            grid[id].onDelete();
+        }
+
         grid[id] = null;
         blockToDie.dirtyNeighbors();
     } 
@@ -815,6 +930,7 @@ function handleInteraction(e) {
             else if (currentTool === "receiver") newBlock = new Receiver(x, y);
             else if (currentTool === "random") newBlock = new Random(x, y, currentRotation);
             else if (currentTool === "trigger") newBlock = new Trigger(x, y, currentRotation);
+            else if (currentTool === "noteBlock") newBlock = new NoteBlock(x, y, currentRotation);
 
             if (newBlock) {
                 grid[id] = newBlock;
@@ -1496,6 +1612,44 @@ function render() {
             ctx.roundRect(-cellSize/2, -cellSize/2, cellSize, cellSize, cellSize * 0.15);
             ctx.fill();
 
+            ctx.restore();
+        } else if (block instanceof NoteBlock) {
+            const cx = x + cellSize / 2;
+            const cy = y + cellSize / 2;
+            ctx.save();
+            ctx.translate(cx, cy);
+            
+            // Base
+            ctx.fillStyle = "#333";
+            ctx.beginPath();
+            ctx.roundRect(-cellSize/2, -cellSize/2, cellSize, cellSize, cellSize * 0.15);
+            ctx.fill();
+        
+            // Note Name
+            const info = getNoteInfo(block.noteIndex);
+            ctx.fillStyle = block.power ? "#ff4d4d" : "#888";
+            ctx.font = `bold ${cellSize * 0.35}px monospace`;
+            ctx.textAlign = "center";
+            ctx.fillText(info.name, 0, cellSize * 0.2);
+        
+            // Icon
+            ctx.font = `${cellSize * 0.4}px serif`;
+            ctx.fillText("♪", 0, -cellSize * 0.15);
+
+            ctx.save();
+            ctx.rotate((block.rotation - 1) * Math.PI / 2);
+
+            // Input indicator
+            const inputColor = block.lastInput ? "#ff4d4d" : "#441111"; 
+            ctx.fillStyle = inputColor;
+            ctx.beginPath();
+            ctx.moveTo(-cellSize*0.5 + cellSize*0.2, 0);
+            ctx.lineTo(-cellSize*0.5, -cellSize*0.15);
+            ctx.lineTo(-cellSize*0.5, cellSize*0.15);
+            ctx.fill();
+
+            ctx.restore()
+        
             ctx.restore();
         }
     });
