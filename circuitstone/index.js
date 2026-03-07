@@ -45,7 +45,8 @@ function exportToJSON() {
             delayAmount: block.delayAmount,
             targetKey: block.targetKey,
             noteIndex: block.noteIndex,
-            text: block.text
+            text: block.text,
+            isCCW: block.isCCW
         };
     });
 
@@ -77,7 +78,7 @@ function importFromJSON(event) {
             Wire, Inverter, Diode, Bridge, Switch, Button, 
             PowerBlock, Lamp, Toggle, HoverSensor, Delay, 
             KeyBlock, Transmitter, Receiver, Random, Trigger,
-            NoteBlock, Comment
+            NoteBlock, Comment, Rotator
         };
 
         parsed.data.forEach((b) => {
@@ -818,6 +819,55 @@ class Comment extends Block {
     }
 }
 
+class Rotator extends Block {
+    constructor(x, y, rotation = 0) {
+        super(x, y, rotation);
+        this.isCCW = false; // Default Clockwise
+        this.lastInput = 0;
+    }
+
+    interact() {
+        this.isCCW = !this.isCCW;
+        render();
+    }
+
+    update() {
+        const input = this.getBackNeighbor();
+        const inputPower = (input && input.power > 0) ? 1 : 0;
+
+        // Trigger on Rising Edge
+        if (inputPower === 1 && this.lastInput === 0) {
+            this.rotateTarget();
+        }
+
+        this.lastInput = inputPower;
+        this.power = inputPower; // Pass-through power
+
+        if (this.power !== this.lastPower) this.dirtyNeighbors();
+        if (inputPower === 1) dirtyBlocks.add(this.y * gridWidth + this.x);
+    }
+
+    rotateTarget() {
+        // Find the block directly in front of the Rotator
+        const nx = this.x + (this.rotation === 1 ? 1 : this.rotation === 3 ? -1 : 0);
+        const ny = this.y + (this.rotation === 2 ? 1 : this.rotation === 0 ? -1 : 0);
+
+        if (nx < 0 || nx >= gridWidth || ny < 0 || ny >= gridHeight) return;
+
+        const target = grid[ny * gridWidth + nx];
+        if (target && typeof target.rotation !== 'undefined') {
+            const step = this.isCCW ? -1 : 1;
+            // Standard 0-3 rotation wrap
+            target.rotation = (target.rotation + step + 4) % 4;
+            
+            // Wake up the target and its new neighbors
+            dirtyBlocks.add(ny * gridWidth + nx);
+            target.dirtyNeighbors();
+        }
+    }
+}
+
+
 // Tool Selection
 document.querySelectorAll('.tool').forEach(btn => {
     btn.addEventListener('click', () => {
@@ -1007,6 +1057,7 @@ function handleInteraction(e) {
             else if (currentTool === "random") newBlock = new Random(x, y, currentRotation);
             else if (currentTool === "trigger") newBlock = new Trigger(x, y, currentRotation);
             else if (currentTool === "noteBlock") newBlock = new NoteBlock(x, y, currentRotation);
+            else if (currentTool === "rotator") newBlock = new Rotator(x, y, currentRotation);
             else if (currentTool === "comment") newBlock = new Comment(x, y);
 
             if (newBlock) {
@@ -1761,7 +1812,59 @@ function render() {
 
 
             ctx.restore();
-        }
+        } else if (block instanceof Rotator) {
+            const cx = x + cellSize / 2;
+            const cy = y + cellSize / 2;
+            ctx.save();
+            ctx.translate(cx, cy);
+            
+            // Rotate the whole icon based on the block's orientation
+            ctx.rotate((block.rotation - 1) * Math.PI / 2);
+        
+            // 1. Base
+            ctx.fillStyle = "#333";
+            ctx.beginPath();
+            ctx.roundRect(-cellSize/2, -cellSize/2, cellSize, cellSize, cellSize * 0.15);
+            ctx.fill();
+        
+            // 2. The Arc (Offset by 45 degrees)
+            ctx.strokeStyle = block.power ? "#ff4d4d" : "#441111";
+            ctx.lineWidth = cellSize * 0.1;
+            ctx.lineCap = "round";
+            
+            const startAngle = -Math.PI / 2 + Math.PI / 4;
+            const endAngle = Math.PI / 2 - Math.PI / 4;
+        
+            ctx.beginPath();
+            ctx.arc(0, 0, cellSize * 0.25, startAngle, endAngle);
+            ctx.stroke();
+        
+            // 3. The Tip (Circle/Knob)
+            ctx.fillStyle = block.power ? "#ff4d4d" : "#441111";
+            
+            ctx.save();
+            // Position at Top end if CCW, Bottom end if CW
+            const targetAngle = block.isCCW ? startAngle : endAngle;
+            ctx.rotate(targetAngle);
+            ctx.translate(cellSize * 0.25, 0);
+        
+            // Draw Circle instead of Triangle
+            ctx.beginPath();
+            ctx.arc(0, 0, cellSize * 0.12, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.restore();
+        
+            // Input indicator
+            const inputColor = block.lastInput ? "#ff4d4d" : "#441111"; 
+            ctx.fillStyle = inputColor;
+            ctx.beginPath();
+            ctx.moveTo(-cellSize*0.5 + cellSize*0.2, 0);
+            ctx.lineTo(-cellSize*0.5, -cellSize*0.15);
+            ctx.lineTo(-cellSize*0.5, cellSize*0.15);
+            ctx.fill();
+        
+            ctx.restore();
+        }        
     });
 }
 
