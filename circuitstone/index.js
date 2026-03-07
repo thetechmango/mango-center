@@ -21,6 +21,10 @@ let lastInteractedId = null;
 const keysDown = new Set();
 let activeEditingComment = null;
 
+let mouseX = 0;
+let mouseY = 0;
+let mouseInCanvas = false;
+
 let wirelessChannels = {}; 
 
 const NOTE_NAMES = ["C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"];
@@ -249,7 +253,16 @@ class Block {
         this.lastPower = this.power;
     }
 
-    render() {}
+    render(x, y, isPreview = false) {
+        ctx.save();
+        if (isPreview) ctx.globalAlpha = 0.4;
+        
+        ctx.translate(x + cellSize / 2, y + cellSize / 2);
+
+        this.draw(ctx, cellSize);
+
+        ctx.restore();
+    }
 }
 
 class Wire extends Block {
@@ -352,21 +365,21 @@ class Wire extends Block {
         this.power = foundPower ? 1 : 0;
     }
 
-    render(x, y, isPreview) {
+    draw() {
         const colorMap = {
             red: this.power ? "#ff4d4d" : "#441111",
             green: this.power ? "#4dff4d" : "#114411",
             blue: this.power ? "#4d4dff" : "#111144",
             white: this.power ? "#ffffff" : "#555555",
-            black: this.power ? "#000000" : "#000000"
+            black: this.power ? "#000000" : "#000000" // Subtle look for insulated
         };
         
         ctx.strokeStyle = colorMap[this.color];
         ctx.lineWidth = cellSize * 0.2;
         ctx.lineCap = "round";
-    
-        const centerX = x + cellSize / 2;
-        const centerY = y + cellSize / 2;
+
+        const centerX = 0;
+        const centerY = 0;
     
         // Draw central dot
         ctx.fillStyle = ctx.strokeStyle;
@@ -374,7 +387,6 @@ class Wire extends Block {
         ctx.arc(centerX, centerY, ctx.lineWidth / 2, 0, Math.PI * 2);
         ctx.fill();
     
-        // Check 4 neighbors and draw lines to them if they are wires or components
         const neighbors = [
             { n: this.getNeighbor(0), dx: 0, dy: -cellSize / 2 }, // Up
             { n: this.getNeighbor(1), dx: cellSize / 2, dy: 0 },  // Right
@@ -384,7 +396,7 @@ class Wire extends Block {
     
         neighbors.forEach(neighbor => {
             if (!neighbor.n) return; 
-
+    
             const isWire = neighbor.n instanceof Wire;
             const connects = isWire && (
                 this.color === "white" || 
@@ -400,7 +412,7 @@ class Wire extends Block {
                 ctx.stroke();
             }
         });
-    }
+    }    
 }
 
 
@@ -409,15 +421,13 @@ class Inverter extends Block {
         this.power = this.getNeighborPower((this.rotation + 2) % 4) > 0 ? 0 : 1;
     }
     
-    render(x, y, isPreview) {
-        const center = cellSize / 2;
+    draw() {
         const baseWidth = cellSize * 0.6;
         const indicatorSize = cellSize * 0.2;
         const gap = cellSize * 0.15;
         const margin = cellSize * 0.0;
     
         ctx.save();
-        ctx.translate(x + center, y + center);
         ctx.rotate((this.rotation - 1) * Math.PI / 2);
     
         ctx.fillStyle = "#333";
@@ -464,12 +474,10 @@ class Diode extends Block {
         this.power = this.getNeighborPower((this.rotation + 2) % 4) > 0 ? 1 : 0;
     }
 
-    render(x, y, isPreview) {
-        const center = cellSize / 2;
+    draw() {
         const baseSize = cellSize * 0.5;
         
         ctx.save();
-        ctx.translate(x + center, y + center);
         ctx.rotate((this.rotation - 1) * Math.PI / 2);
     
         // Full tile rounded base
@@ -510,11 +518,8 @@ class Switch extends Block {
         this.dirtyNeighbors();
     }
 
-    render(x, y, isPreview) {
-        const center = cellSize / 2;
-            
+    draw() {
         ctx.save();
-        ctx.translate(x + center, y + center);
         ctx.rotate((this.rotation - 1) * Math.PI / 2);
     
         // Full tile rounded base
@@ -558,12 +563,10 @@ class Button extends Block {
         dirtyBlocks.add(this.y * gridWidth + this.x);
     }
 
-    render(x, y, isPreview) {
-        const center = cellSize / 2;
+    draw() {
         const indicatorSize = cellSize * 0.8;
         
         ctx.save();
-        ctx.translate(x + center, y + center);
         ctx.rotate((this.rotation - 1) * Math.PI / 2);
     
         // Full tile circle base
@@ -625,16 +628,13 @@ class Bridge extends Block {
         }
     }
 
-    render(x, y, isPreview) {
-        const cx = x + cellSize / 2;
-        const cy = y + cellSize / 2;
+    draw() {
         const thick = cellSize * 0.2;
         const len = cellSize * 0.4;
 
         ctx.lineCap = "round";
     
         ctx.save();
-        ctx.translate(cx, cy);
         ctx.rotate((this.rotation - 1) * Math.PI / 2);
 
         // Full tile rounded base
@@ -716,10 +716,7 @@ class Lamp extends Block {
         }
     }
 
-    render(x, y, isPreview) {
-        const cx = x + cellSize / 2;
-        const cy = y + cellSize / 2;
-
+    draw() {
         const colorMap = {
             red: this.power ? "#ff4d4d" : "#000000",
             green: this.power ? "#4dff4d" : "#000000",
@@ -729,7 +726,6 @@ class Lamp extends Block {
         };
     
         ctx.save();
-        ctx.translate(cx, cy);
         ctx.rotate((this.rotation - 1) * Math.PI / 2);
     
         // Body (full cell)
@@ -779,13 +775,8 @@ class Toggle extends Block {
         }
     }
 
-    render(x, y, isPreview) {
-        const cx = x + cellSize / 2;
-        const cy = y + cellSize / 2;
-    
+    draw() {
         ctx.save();
-        ctx.translate(cx, cy);
-        // Base rotation for the block direction
         ctx.rotate((this.rotation - 1) * Math.PI / 2);
     
         // Full tile rounded base
@@ -844,13 +835,11 @@ class HoverSensor extends Block {
 
     interact() {}
 
-    render(x, y, isPreview) {
-        const center = cellSize / 2;
+    draw() {
         const ringOuter = cellSize * 0.35;
         const ringWidth = cellSize * 0.12;
     
         ctx.save();
-        ctx.translate(x + center, y + center);
         ctx.rotate((this.rotation - 1) * Math.PI / 2);
     
         // Full tile rounded base
@@ -920,11 +909,8 @@ class Delay extends Block {
         }
     }
 
-    render(x, y, isPreview) {
-        const cx = x + cellSize / 2;
-        const cy = y + cellSize / 2;
+    draw() {
         ctx.save();
-        ctx.translate(cx, cy);
         ctx.rotate((this.rotation - 1) * Math.PI / 2);
     
         // Full tile rounded base
@@ -1017,14 +1003,9 @@ class KeyBlock extends Block {
         if (this.isBinding) dirtyBlocks.add(this.y * gridWidth + this.x);
     }
 
-    render(x, y, isPreview) {
-        const cx = x + cellSize / 2;
-        const cy = y + cellSize / 2;
+    draw() {
         ctx.save();
-    
-        ctx.translate(cx, cy);
-        ctx.rotate((this.rotation - 1) * Math.PI / 2);
-        
+
         ctx.beginPath();
         ctx.fillStyle = this.isBinding ? "#fff" : "#333";
         ctx.roundRect(-cellSize/2, -cellSize/2, cellSize, cellSize, cellSize * 0.15);
@@ -1077,11 +1058,8 @@ class Transmitter extends Block {
         this.power = 0; 
     }
 
-    render(x, y, isPreview) {
-        const cx = x + cellSize / 2;
-        const cy = y + cellSize / 2;
+    draw() {
         ctx.save();
-        ctx.translate(cx, cy);
     
         ctx.fillStyle = "#333";
         ctx.beginPath();
@@ -1130,12 +1108,7 @@ class Receiver extends Block {
         }
     }
 
-    render(x, y, isPreview) {
-        const cx = x + cellSize / 2;
-        const cy = y + cellSize / 2;
-        ctx.save();
-        ctx.translate(cx, cy);
-    
+    draw() {
         ctx.fillStyle = "#333";
         ctx.beginPath();
         ctx.roundRect(-cellSize/2, -cellSize/2, cellSize, cellSize, cellSize * 0.15);
@@ -1157,8 +1130,6 @@ class Receiver extends Block {
         ctx.textAlign = "center";
         ctx.textBaseline = "middle";
         ctx.fillText(this.channel, 0, 0);
-    
-        ctx.restore();
     }
 }
 
@@ -1187,13 +1158,8 @@ class Random extends Block {
         if (inputPower === 1) dirtyBlocks.add(this.y * gridWidth + this.x);
     }
 
-    render(x, y, isPreview) {
-        const cx = x + cellSize / 2;
-        const cy = y + cellSize / 2;
+    draw() {
         ctx.save();
-        ctx.translate(cx, cy);
-
-       
     
         ctx.fillStyle = "#333";
         ctx.beginPath();
@@ -1250,26 +1216,20 @@ class Trigger extends Block {
         }
     }
 
-    render(x, y, isPreview) {
-        const cx = x + cellSize / 2;
-        const cy = y + cellSize / 2;
+    draw() {
         ctx.save();
-        ctx.translate(cx, cy);
     
-        // 1. Base
         ctx.fillStyle = "#333";
         ctx.beginPath();
         ctx.roundRect(-cellSize/2, -cellSize/2, cellSize, cellSize, cellSize * 0.15);
         ctx.fill();
     
-        // 2. Pulse Icon (The "Rising Edge" Spike)
         ctx.strokeStyle = this.power ? "#ff4d4d" : "#441111";
         ctx.lineWidth = cellSize * 0.1;
         ctx.lineCap = "round";
         ctx.lineJoin = "round";
     
         ctx.beginPath();
-        // Flat line -> Spike -> Flat line
         ctx.moveTo(-cellSize * 0.3, cellSize * 0.15);
         ctx.lineTo(-cellSize * 0.1, cellSize * 0.15);
         ctx.lineTo(0, -cellSize * 0.25);
@@ -1303,10 +1263,7 @@ class PowerBlock extends Block {
 
     update() {}
 
-    render(x, y, isPreview) {
-        const cx = x + cellSize / 2;
-        const cy = y + cellSize / 2;
-
+    draw() {
         const colorMap = {
             red: this.power ? "#ff4d4d" : "#441111",
             green: this.power ? "#4dff4d" : "#114411",
@@ -1316,7 +1273,6 @@ class PowerBlock extends Block {
         };
 
         ctx.save();
-        ctx.translate(cx, cy);
         ctx.rotate((this.rotation - 1) * Math.PI / 2);
         
         ctx.fillStyle = colorMap[this.color] || "ff4d4d";
@@ -1409,12 +1365,7 @@ class NoteBlock extends Block {
         if (inputPower === 1) dirtyBlocks.add(this.y * gridWidth + this.x);
     }
 
-    render(x, y, isPreview) {
-        const cx = x + cellSize / 2;
-        const cy = y + cellSize / 2;
-        ctx.save();
-        ctx.translate(cx, cy);
-        
+    draw() {
         // Base
         ctx.fillStyle = "#333";
         ctx.beginPath();
@@ -1443,8 +1394,6 @@ class NoteBlock extends Block {
         ctx.lineTo(-cellSize*0.5, -cellSize*0.15);
         ctx.lineTo(-cellSize*0.5, cellSize*0.15);
         ctx.fill();
-
-        ctx.restore()
     
         ctx.restore();
     }
@@ -1475,13 +1424,7 @@ class Comment extends Block {
         }
     }
 
-    render(x, y, isPreview) {
-        const cx = x + cellSize / 2;
-        const cy = y + cellSize / 2;
-
-        ctx.save();
-        ctx.translate(cx, cy);
-        
+    draw() {
         // Base
         ctx.fillStyle = "#333";
         ctx.beginPath();
@@ -1497,9 +1440,6 @@ class Comment extends Block {
             ctx.lineTo(cellSize * 0.4, i * cellSize * 0.2); 
             ctx.stroke();
         }
-
-
-        ctx.restore();
     }
 }
 
@@ -1550,13 +1490,8 @@ class Rotator extends Block {
         }
     }
 
-    render(x, y, isPreview) {
-        const cx = x + cellSize / 2;
-        const cy = y + cellSize / 2;
+    draw() {
         ctx.save();
-        ctx.translate(cx, cy);
-        
-        // Rotate the whole icon based on the block's orientation
         ctx.rotate((this.rotation - 1) * Math.PI / 2);
     
         // 1. Base
@@ -1686,6 +1621,8 @@ canvas.addEventListener("mousedown", (e) => {
 
 canvas.addEventListener("mousemove", (e) => {
     const rect = canvas.getBoundingClientRect();
+    mouseX = e.clientX - rect.left;
+    mouseY = e.clientY - rect.top;
     const gx = Math.floor((e.clientX - rect.left) / (rect.width / gridWidth));
     const gy = Math.floor((e.clientY - rect.top) / (rect.height / gridHeight));
     const currentId = gy * gridWidth + gx;
@@ -1708,6 +1645,15 @@ canvas.addEventListener("mousemove", (e) => {
             handleInteraction(e);
         }
     }
+});
+
+canvas.addEventListener("mouseenter", () => {
+    mouseInCanvas = true;
+});
+
+canvas.addEventListener("mouseleave", () => {
+    mouseInCanvas = false;
+    render(); // clear the ghost preview
 });
 
 window.addEventListener("mouseup", () => {
@@ -1857,7 +1803,7 @@ function tick() {
     let toProcess = new Set(dirtyBlocks);
     dirtyBlocks.clear();
 
-    // PHASE 1: Components
+    // Components
     for (let id of toProcess) {
         const block = grid[id];
         if (block && !(block instanceof Wire)) {
@@ -1880,7 +1826,7 @@ function tick() {
         }
     }
 
-    // PHASE 2: Wires (BFS)
+    // Wires
     let wireProcess = new Set(dirtyBlocks);
     for (let id of wireProcess) {
         const block = grid[id];
@@ -1906,7 +1852,39 @@ function render() {
         ctx.beginPath(); ctx.moveTo(0, i * cellSize); ctx.lineTo(canvas.width, i * cellSize); ctx.stroke();
     }
 
-    // Draw blocks
+    if (mouseInCanvas) {
+        const gx = Math.floor(mouseX / cellSize);
+        const gy = Math.floor(mouseY / cellSize);
+
+        // Map your tool string (e.g., 'rotator') to the Class name
+        const constructors = { 
+            wire: Wire, inverter: Inverter, diode: Diode, bridge: Bridge, 
+            switch: Switch, button: Button, lamp: Lamp, toggle: Toggle, 
+            hoverSensor: HoverSensor, delay: Delay, keyBlock: KeyBlock, 
+            transmitter: Transmitter, receiver: Receiver, random: Random, 
+            trigger: Trigger, powerBlock: PowerBlock, comment: Comment,
+            rotator: Rotator, noteBlock: NoteBlock
+        };
+
+        const PreviewClass = constructors[currentTool];
+        if (PreviewClass) {
+            // Create a fake block just for this frame
+            const ghost = new PreviewClass(gx, gy, currentRotation);
+            
+            // Sync current UI attributes (Color, Channel, etc.)
+            if (ghost.hasOwnProperty('color')) {
+                ghost.color = document.getElementById("wire-color").value;
+            }
+            if (ghost.hasOwnProperty('rotation')) {
+                ghost.rotation = currentRotation;
+            }
+            
+            // Draw it at the mouse position with 'isPreview = true'
+            ghost.render(gx * cellSize, gy * cellSize, true);
+        }
+    }
+
+    // Draw blocks on top of ghost preview
     grid.forEach((block, i) => {
         if (block) {
             const bx = (i % gridWidth) * cellSize;
@@ -1914,6 +1892,8 @@ function render() {
             block.render(bx, by, false);
         }
     });
+
+    
 }
 
 function togglePause() {
