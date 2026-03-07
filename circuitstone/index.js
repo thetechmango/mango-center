@@ -92,7 +92,8 @@ function importFromJSON(event) {
             Wire, Inverter, Diode, Bridge, Switch, Button, 
             PowerBlock, Lamp, Toggle, HoverSensor, Delay, 
             KeyBlock, Transmitter, Receiver, Random, Trigger,
-            NoteBlock, Comment, Rotator, Actuator, Repulsor
+            NoteBlock, Comment, Rotator, Actuator, Repulsor,
+            Detector
         };
 
         parsed.data.forEach((b) => {
@@ -1668,46 +1669,100 @@ class Repulsor extends Block {
         // Now cx, cy is the empty tile → shift chain forward
         for (let i = chain.length - 1; i >= 0; i--) {
             const { block, x, y } = chain[i];
-
+        
             const newX = x + dx;
             const newY = y + dy;
-
+        
+            // Move block
             grid[newY * gridWidth + newX] = block;
             block.x = newX;
             block.y = newY;
-
+        
             grid[y * gridWidth + x] = null;
-
+        
+            // Dirty new position
             dirtyBlocks.add(newY * gridWidth + newX);
             block.dirtyNeighbors();
-        }
+        
+            // Dirty old position
+            dirtyBlocks.add(y * gridWidth + x);
+        
+            // Dirty neighbors of old position
+            const offsets = [
+                [0, -1], [1, 0], [0, 1], [-1, 0]
+            ];
+        
+            for (let [ox, oy] of offsets) {
+                const nx = x + ox, ny = y + oy;
+                if (nx >= 0 && nx < gridWidth && ny >= 0 && ny < gridHeight) {
+                    dirtyBlocks.add(ny * gridWidth + nx);
+                }
+            }
+        }        
     }
 
-    draw(ctx, size) {
+    draw() {
         ctx.save();
         ctx.rotate((this.rotation - 1) * Math.PI / 2);
 
         // Base
         ctx.fillStyle = "#333";
         ctx.beginPath();
-        ctx.roundRect(-size/2, -size/2, size, size, size * 0.15);
+        ctx.roundRect(-cellSize/2, -cellSize/2, cellSize, cellSize, cellSize * 0.15);
         ctx.fill();
 
-        // Arrow (bright when powered)
-        ctx.fillStyle = this.power ? "#ff4d4d" : "#441111";
+        // Arrow
+        ctx.fillStyle = this.power ? "#4d4dff" : "#111144";
         ctx.beginPath();
-        ctx.moveTo(size * 0.2, 0);
-        ctx.lineTo(-size * 0.1, -size * 0.22);
-        ctx.lineTo(-size * 0.1, size * 0.22);
+        ctx.moveTo(cellSize * 0.2, 0);
+        ctx.lineTo(-cellSize * 0.1, -cellSize * 0.22);
+        ctx.lineTo(-cellSize * 0.1, cellSize * 0.22);
         ctx.fill();
 
         // Input indicator
         const inputColor = this.lastInput ? "#ff4d4d" : "#441111";
         ctx.fillStyle = inputColor;
         ctx.beginPath();
-        ctx.moveTo(-size*0.5 + size*0.2, 0);
-        ctx.lineTo(-size*0.5, -size*0.15);
-        ctx.lineTo(-size*0.5, size*0.15);
+        ctx.moveTo(-cellSize*0.5 + cellSize*0.2, 0);
+        ctx.lineTo(-cellSize*0.5, -cellSize*0.15);
+        ctx.lineTo(-cellSize*0.5, cellSize*0.15);
+        ctx.fill();
+
+        ctx.restore();
+    }
+}
+
+class Detector extends Block {
+    constructor(x, y, rotation = 0) {
+        super(x, y, rotation);
+    }
+
+    update() {
+        const target = this.getForwardNeighbor();
+        const hasBlock = target ? 1 : 0;
+
+        this.power = hasBlock;
+
+        if (this.power !== this.lastPower) {
+            this.dirtyNeighbors();
+        }
+    }
+
+    draw() {
+        ctx.save();
+        ctx.rotate((this.rotation - 1) * Math.PI / 2);
+
+        // Base
+        ctx.fillStyle = "#333";
+        ctx.beginPath();
+        ctx.roundRect(-cellSize/2, -cellSize/2, cellSize, cellSize, cellSize * 0.15);
+        ctx.fill();
+
+        // Sensor icon (eyes)
+        ctx.fillStyle = this.power ? "#ffff4d" : "#444411";
+        ctx.beginPath();
+        ctx.arc(cellSize * 0.2, cellSize * 0.2, cellSize * 0.15, 0, Math.PI * 2);
+        ctx.arc(cellSize * 0.2, cellSize * -0.2, cellSize * 0.15, 0, Math.PI * 2);
         ctx.fill();
 
         ctx.restore();
@@ -1964,6 +2019,7 @@ function handleInteraction(e) {
             else if (currentTool === "rotator") newBlock = new Rotator(x, y, currentRotation);
             else if (currentTool === "actuator") newBlock = new Actuator(x, y, currentRotation);
             else if (currentTool === "repulsor") newBlock = new Repulsor(x, y, currentRotation);
+            else if (currentTool === "detector") newBlock = new Detector(x, y, currentRotation);
             else if (currentTool === "comment") newBlock = new Comment(x, y);
 
             if (newBlock) {
@@ -2154,7 +2210,7 @@ function render() {
             transmitter: Transmitter, receiver: Receiver, random: Random, 
             trigger: Trigger, powerBlock: PowerBlock, comment: Comment,
             rotator: Rotator, noteBlock: NoteBlock, actuator: Actuator,
-            repulsor: Repulsor
+            repulsor: Repulsor, detector: Detector
         };
 
         const PreviewClass = constructors[currentTool];
