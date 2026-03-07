@@ -1769,6 +1769,142 @@ class Detector extends Block {
     }
 }
 
+class Duplicator extends Block {
+    constructor(x, y, rotation = 0) {
+        super(x, y, rotation);
+        this.lastInput = 0;
+    }
+
+    update() {
+        // Power comes from LEFT and RIGHT relative to rotation
+        const left = this.getLeftNeighbor();
+        const right = this.getRightNeighbor();
+
+        const inputPower =
+            ((left && left.power > 0) || (right && right.power > 0)) ? 1 : 0;
+
+        // Rising edge → duplicate
+        if (inputPower === 1 && this.lastInput === 0) {
+            this.duplicate();
+        }
+
+        this.lastInput = inputPower;
+        this.power = inputPower;
+
+        if (this.power !== this.lastPower) this.dirtyNeighbors();
+    }
+
+    duplicate() {
+        // Direction vector
+        const dx = (this.rotation === 1 ? 1 : this.rotation === 3 ? -1 : 0);
+        const dy = (this.rotation === 2 ? 1 : this.rotation === 0 ? -1 : 0);
+
+        // Back (source)
+        const bx = this.x - dx;
+        const by = this.y - dy;
+
+        // Front (destination)
+        const fx = this.x + dx;
+        const fy = this.y + dy;
+
+        // Bounds
+        if (bx < 0 || bx >= gridWidth || by < 0 || by >= gridHeight) return;
+        if (fx < 0 || fx >= gridWidth || fy < 0 || fy >= gridHeight) return;
+
+        const backIdx = by * gridWidth + bx;
+        const frontIdx = fy * gridWidth + fx;
+
+        const source = grid[backIdx];
+
+        // If no block behind → delete front
+        if (!source) {
+            if (grid[frontIdx]) {
+                grid[frontIdx] = null;
+                dirtyBlocks.add(frontIdx);
+            }
+            return;
+        }
+
+        // Create a new instance of the same class
+        const newBlock = new source.constructor(fx, fy, source.rotation);
+
+        // Copy all own properties (deep copy for primitives)
+        for (let key of Object.keys(source)) {
+            if (key === "x" || key === "y") continue; // handled separately
+            try {
+                newBlock[key] = structuredClone(source[key]);
+            } catch {
+                newBlock[key] = source[key];
+            }
+        }
+
+        // Place new block in front
+        grid[frontIdx] = newBlock;
+
+        // Dirty everything affected
+        dirtyBlocks.add(frontIdx);
+        newBlock.dirtyNeighbors();
+
+        // Dirty neighbors of front tile
+        const offsets = [
+            [0, -1], [1, 0], [0, 1], [-1, 0]
+        ];
+
+        for (let [ox, oy] of offsets) {
+            const nx = fx + ox, ny = fy + oy;
+            if (nx >= 0 && nx < gridWidth && ny >= 0 && ny < gridHeight)
+                dirtyBlocks.add(ny * gridWidth + nx);
+        }
+    }
+
+    draw() {
+        ctx.save();
+        ctx.rotate((this.rotation - 1) * Math.PI / 2);
+
+        // Base
+        ctx.fillStyle = "#333";
+        ctx.beginPath();
+        ctx.roundRect(-cellSize/2, -cellSize/2, cellSize, cellSize, cellSize * 0.15);
+        ctx.fill();
+
+        
+        ctx.fillStyle = this.power ? "#4d4dff" : "#111144";
+
+        // Back square
+        ctx.beginPath();
+        ctx.roundRect(-cellSize*0.35, -cellSize*0.15, cellSize*0.3, cellSize*0.3, cellSize*0.05);
+        ctx.fill();
+
+        // Front square rotated 45°
+        ctx.save();
+        ctx.translate(cellSize*0.2, 0);
+        ctx.rotate(Math.PI / 4);
+        ctx.beginPath();
+        ctx.roundRect(-cellSize*0.12, -cellSize*0.12, cellSize*0.24, cellSize*0.24, cellSize*0.04);
+        ctx.fill();
+        ctx.restore();
+
+        // Side input indicators
+        const inputColor = this.lastInput ? "#ff4d4d" : "#441111";
+        ctx.fillStyle = inputColor;
+
+        ctx.fillStyle = inputColor;
+        ctx.beginPath();
+        ctx.moveTo(0, -cellSize*0.5 + cellSize*0.2);   // tip
+        ctx.lineTo(-cellSize*0.15, -cellSize*0.5);     // top-left
+        ctx.lineTo(cellSize*0.15, -cellSize*0.5);      // top-right
+        ctx.fill();
+
+        ctx.beginPath();
+        ctx.moveTo(0, cellSize*0.5 - cellSize*0.2);    // tip
+        ctx.lineTo(-cellSize*0.15, cellSize*0.5);      // bottom-left
+        ctx.lineTo(cellSize*0.15, cellSize*0.5);       // bottom-right
+        ctx.fill();
+
+        ctx.restore();
+    }
+}
+
 // Tool Selection
 document.querySelectorAll('.tool').forEach(btn => {
     btn.addEventListener('click', () => {
@@ -2020,6 +2156,7 @@ function handleInteraction(e) {
             else if (currentTool === "actuator") newBlock = new Actuator(x, y, currentRotation);
             else if (currentTool === "repulsor") newBlock = new Repulsor(x, y, currentRotation);
             else if (currentTool === "detector") newBlock = new Detector(x, y, currentRotation);
+            else if (currentTool === "duplicator") newBlock = new Duplicator(x, y, currentRotation);
             else if (currentTool === "comment") newBlock = new Comment(x, y);
 
             if (newBlock) {
@@ -2202,7 +2339,7 @@ function render() {
         const gx = Math.floor(mouseX / cellSize);
         const gy = Math.floor(mouseY / cellSize);
 
-        // Map your tool string (e.g., 'rotator') to the Class name
+        // Map tool string to the Class name
         const constructors = { 
             wire: Wire, inverter: Inverter, diode: Diode, bridge: Bridge, 
             switch: Switch, button: Button, lamp: Lamp, toggle: Toggle, 
@@ -2210,7 +2347,7 @@ function render() {
             transmitter: Transmitter, receiver: Receiver, random: Random, 
             trigger: Trigger, powerBlock: PowerBlock, comment: Comment,
             rotator: Rotator, noteBlock: NoteBlock, actuator: Actuator,
-            repulsor: Repulsor, detector: Detector
+            repulsor: Repulsor, detector: Detector, duplicator: Duplicator
         };
 
         const PreviewClass = constructors[currentTool];
