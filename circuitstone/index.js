@@ -1001,13 +1001,15 @@ canvas.addEventListener("wheel", (e) => {
 }, { passive: false });
 
 colorPicker.addEventListener("change", () => {
-    // Automatically switch to wire tool when a color is picked
+    // Automatically switch to wire tool when a color is picked (disabled)
+    /*
     currentTool = "wire";
     
     document.querySelectorAll('.tool').forEach(btn => {
         btn.classList.remove('active');
         if (btn.dataset.type === "wire") btn.classList.add('active');
     });
+    */
 });
 
 function handleInteraction(e) {
