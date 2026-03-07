@@ -117,6 +117,7 @@
         <button class="tool" data-type="comment" title="Holds text that you can change with a click">Comment</button>
         <div class="info">Rotation: <span id="rot-display">Right</span></div>
 
+        <button id="tickRateBtn" class="action-btn" onclick="changeTickRate()">Tick rate: 20</button>
         <button id="pause-btn" class="action-btn" onclick="togglePause()">Pause</button>
         <button class="action-btn" onclick="step()">Step</button>
 
@@ -130,6 +131,10 @@
         <input type="file" id="importFile" style="display:none" onchange="importFromJSON(event)">
         <button class="action-btn" onclick="document.getElementById('importFile').click()">Import JSON</button>
     </div>
+    <div id="selection-ui" style="display:none; position:fixed; z-index:100; pointer-events:none;">
+        <button class="action-btn selection-btn" onclick="moveSelection()" style="pointer-events:auto;">✥ Move</button>
+        <button class="action-btn selection-btn" onclick="copySelection()" style="pointer-events:auto;">⎘ Copy</button>
+    </div>    
     <canvas id="canvas"></canvas>
     <script src="index.js"></script>
 </body>

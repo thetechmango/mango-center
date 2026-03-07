@@ -11,6 +11,8 @@ let grid = new Array(gridWidth * gridHeight).fill(null);
 let cellSize = canvas.width / gridWidth;
 let dirtyBlocks = new Set();
 
+let tickRate = 20; // 20 tps
+
 let currentTool = "wire";
 let currentRotation = 1;
 const rotationNames = ["Up", "Right", "Down", "Left"];
@@ -20,6 +22,12 @@ let pressedButton = null;
 let lastInteractedId = null;
 const keysDown = new Set();
 let activeEditingComment = null;
+
+let selection = null; // {x1, y1, x2, y2} in grid coords
+let clipboard = null; // Array of {type, dx, dy, rotation, color, etc.}
+let isSelecting = false;
+let isDraggingUI = false;
+let movePreview = null; // {dx, dy}
 
 let mouseX = 0;
 let mouseY = 0;
@@ -1556,6 +1564,10 @@ window.addEventListener("keydown", (e) => {
         return;
     }
 
+    if (e.ctrlKey && e.key === 'v' && clipboard) {
+        pastingMode = true; // render() will now draw clipboard ghost at cursor
+    }
+
     {
         const key = e.key.toUpperCase();
         if (!keysDown.has(key)) {
@@ -1601,6 +1613,35 @@ window.addEventListener("keyup", (e) => {
 canvas.addEventListener("mousedown", (e) => {
     isDragging = true;
     dragButton = e.button;
+
+    if (e.button === 1) {
+        e.preventDefault();
+        isSelecting = true;
+        
+        const gx = Math.floor(mouseX / cellSize);
+        const gy = Math.floor(mouseY / cellSize);
+        
+        selection = { x1: gx, y1: gy, x2: gx, y2: gy };
+        render();
+    }
+    else if (e.button === 0) { // Left Click
+        if (clipboard && isPasting) {
+            // Logic for PASTE (Stamping the clipboard)
+            pasteAt(gx, gy);
+            isPasting = false;
+        } else if (selection) {
+            // Logic to CLEAR SELECTION if clicking elsewhere
+            selection = null;
+            showFloatingUI();
+        }
+        render();
+    }
+
+    if (!e.target.closest('.selection-btn')) {
+        selection = null;
+        showFloatingUI(); // Hide buttons
+        render();
+    }
     
     const rect = canvas.getBoundingClientRect();
     const x = Math.floor((e.clientX - rect.left) / (rect.width / gridWidth));
@@ -1626,6 +1667,17 @@ canvas.addEventListener("mousemove", (e) => {
     const gx = Math.floor((e.clientX - rect.left) / (rect.width / gridWidth));
     const gy = Math.floor((e.clientY - rect.top) / (rect.height / gridHeight));
     const currentId = gy * gridWidth + gx;
+
+    if (isSelecting && (e.buttons & 4) && selection !== null) {
+        selection.x2 = Math.floor(mouseX / cellSize);
+        selection.y2 = Math.floor(mouseY / cellSize);
+        render();
+    } else if (isSelecting) {
+        // If we were selecting but the button was released outside the canvas
+        isSelecting = false;
+        showFloatingUI(); 
+        render();
+    }
 
     // Sensor logic
     grid.forEach((block, id) => {
@@ -1660,6 +1712,7 @@ window.addEventListener("mouseup", () => {
     isDragging = false;
     dragButton = -1;
     lastInteractedId = null;
+    isSelecting = false;
 
     if (pressedButton) {
         pressedButton.release();
@@ -1782,6 +1835,76 @@ function resizeGrid(newW, newH) {
 
 canvas.addEventListener("contextmenu", e => e.preventDefault());
 
+function copySelection(isMove = false) {
+    const xMin = Math.min(selection.x1, selection.x2);
+    const xMax = Math.max(selection.x1, selection.x2);
+    const yMin = Math.min(selection.y1, selection.y2);
+    const yMax = Math.max(selection.y1, selection.y2);
+
+    clipboard = [];
+    for (let sy = yMin; sy <= yMax; sy++) {
+        for (let sx = xMin; sx <= xMax; sx++) {
+            const b = grid[sy * gridWidth + sx];
+            if (b) {
+                // Store a copy of the block data
+                clipboard.push({ 
+                    data: JSON.parse(JSON.stringify(b)), // Simplified deep copy
+                    type: b.constructor.name,
+                    dx: sx - xMin, 
+                    dy: sy - yMin 
+                });
+                if (isMove) grid[sy * gridWidth + sx] = null;
+            }
+        }
+    }
+    selection = null; // Clear selection after action
+    showFloatingUI();
+    render();
+}
+
+function moveSelection() { copySelection(true); }
+
+function showFloatingUI() {
+    const ui = document.getElementById("selection-ui");
+    if (!selection || isSelecting) {
+        if (ui) ui.style.display = "none";
+        return;
+    }
+    
+    const xMin = Math.min(selection.x1, selection.x2);
+    const yMin = Math.min(selection.y1, selection.y2);
+    
+    if (ui) {
+        ui.style.display = "flex";
+        // Position it relative to the canvas
+        const rect = canvas.getBoundingClientRect();
+        ui.style.left = (rect.left + xMin * cellSize) + "px";
+        ui.style.top = (rect.top + yMin * cellSize - 45) + "px"; // 45px above
+    }
+}
+
+
+function drawSelectionUI() {
+    if (!selection) return;
+
+    // Calculate bounds so dragging up/left still works
+    const xMin = Math.min(selection.x1, selection.x2);
+    const yMin = Math.min(selection.y1, selection.y2);
+    const xMax = Math.max(selection.x1, selection.x2);
+    const yMax = Math.max(selection.y1, selection.y2);
+
+    const x = xMin * cellSize;
+    const y = yMin * cellSize;
+    const w = (xMax - xMin + 1) * cellSize;
+    const h = (yMax - yMin + 1) * cellSize;
+
+    // 1. Draw Dashed Selection Box
+    ctx.strokeStyle = "#00ff00";
+    ctx.setLineDash([5, 5]);
+    ctx.lineWidth = 2;
+    ctx.strokeRect(x, y, w, h);
+    ctx.setLineDash([]);
+}
 
 function tick() {
     wirelessChannels = {};
@@ -1893,12 +2016,28 @@ function render() {
         }
     });
 
-    
+    // Paste preview
+    if (clipboard && isPasting) {
+        const gx = Math.floor(mouseX / cellSize);
+        const gy = Math.floor(mouseY / cellSize);
+        clipboard.forEach(entry => {
+            const preview = new constructors[entry.type](gx + entry.dx, gy + entry.dy);
+            Object.assign(preview, entry.data);
+            preview.render((gx + entry.dx) * cellSize, (gy + entry.dy) * cellSize, true);
+        });
+    }
+
+    drawSelectionUI();
 }
 
 function togglePause() {
     isPaused = !isPaused;
     document.getElementById("pause-btn").innerText = isPaused ? "Resume" : "Pause";
+}
+
+function changeTickRate() {
+    tickRate = Math.max(1, Number(prompt('New tick rate:' )));
+    document.getElementById('tickRateBtn').innerText = `Tick Rate: ${tickRate}`;
 }
 
 function step() {
@@ -1909,10 +2048,9 @@ function step() {
 }
 
 let lastTickTime = 0;
-const tickRate = 50; // 20 tps
 
 function frame(timestamp) {
-    if (!isPaused && timestamp - lastTickTime >= tickRate) {
+    if (!isPaused && timestamp - lastTickTime >= 1000/tickRate) {
         tick();
         lastTickTime = timestamp;
     }
