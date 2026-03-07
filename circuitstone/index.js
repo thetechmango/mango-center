@@ -228,7 +228,7 @@ class Block {
         const neighbor = this.getNeighbor(dir);
         if (!neighbor) return 0;
     
-        if (neighbor.color === "black") {
+        if (neighbor.color === "black" && !(this instanceof Lamp)) {
             return 0;
         }
 
@@ -248,6 +248,8 @@ class Block {
     prepareNextTick() {
         this.lastPower = this.power;
     }
+
+    render() {}
 }
 
 class Wire extends Block {
@@ -349,18 +351,149 @@ class Wire extends Block {
         }
         this.power = foundPower ? 1 : 0;
     }
+
+    render(x, y, isPreview) {
+        const colorMap = {
+            red: this.power ? "#ff4d4d" : "#441111",
+            green: this.power ? "#4dff4d" : "#114411",
+            blue: this.power ? "#4d4dff" : "#111144",
+            white: this.power ? "#ffffff" : "#555555",
+            black: this.power ? "#000000" : "#000000"
+        };
+        
+        ctx.strokeStyle = colorMap[this.color];
+        ctx.lineWidth = cellSize * 0.2;
+        ctx.lineCap = "round";
+    
+        const centerX = x + cellSize / 2;
+        const centerY = y + cellSize / 2;
+    
+        // Draw central dot
+        ctx.fillStyle = ctx.strokeStyle;
+        ctx.beginPath();
+        ctx.arc(centerX, centerY, ctx.lineWidth / 2, 0, Math.PI * 2);
+        ctx.fill();
+    
+        // Check 4 neighbors and draw lines to them if they are wires or components
+        const neighbors = [
+            { n: this.getNeighbor(0), dx: 0, dy: -cellSize / 2 }, // Up
+            { n: this.getNeighbor(1), dx: cellSize / 2, dy: 0 },  // Right
+            { n: this.getNeighbor(2), dx: 0, dy: cellSize / 2 },  // Down
+            { n: this.getNeighbor(3), dx: -cellSize / 2, dy: 0 }  // Left
+        ];
+    
+        neighbors.forEach(neighbor => {
+            if (!neighbor.n) return; 
+
+            const isWire = neighbor.n instanceof Wire;
+            const connects = isWire && (
+                this.color === "white" || 
+                neighbor.n.color === "white" || 
+                this.color === neighbor.n.color
+            );
+            
+            const isComponent = !isWire && (this.color !== "black"); 
+            if (connects || isComponent) {
+                ctx.beginPath();
+                ctx.moveTo(centerX, centerY);
+                ctx.lineTo(centerX + neighbor.dx, centerY + neighbor.dy);
+                ctx.stroke();
+            }
+        });
+    }
 }
 
 
 class Inverter extends Block {
     update() {
         this.power = this.getNeighborPower((this.rotation + 2) % 4) > 0 ? 0 : 1;
-    }    
+    }
+    
+    render(x, y, isPreview) {
+        const center = cellSize / 2;
+        const baseWidth = cellSize * 0.6;
+        const indicatorSize = cellSize * 0.2;
+        const gap = cellSize * 0.15;
+        const margin = cellSize * 0.0;
+    
+        ctx.save();
+        ctx.translate(x + center, y + center);
+        ctx.rotate((this.rotation - 1) * Math.PI / 2);
+    
+        ctx.fillStyle = "#333";
+        const baseL = cellSize - (margin * 2);
+        ctx.beginPath();
+        ctx.roundRect(-baseL/2, -baseWidth/2, baseL, baseWidth, cellSize * 0.1);
+        ctx.fill();
+    
+        const outputColor = this.power ? "#ff4d4d" : "#441111";
+        const inputColor = !this.power ? "#ff4d4d" : "#441111";
+    
+        // Input triangle (Back)
+        ctx.fillStyle = inputColor;
+        const triW = indicatorSize * 1;
+        const triH = indicatorSize * 0.9;
+        const triX = -baseL/2 + indicatorSize * 0.5;
+
+        ctx.beginPath();
+        ctx.moveTo(triX + triW, 0);
+        ctx.lineTo(triX, -triH);
+        ctx.lineTo(triX, triH);
+        ctx.closePath();
+        ctx.fill();
+
+        // Output line (Front)
+        ctx.strokeStyle = outputColor;
+        ctx.lineWidth = indicatorSize;
+        ctx.lineCap = "butt";
+        
+        const lineStart = triX + (indicatorSize / 2) + gap;
+        const lineEnd = baseL / 2 - (indicatorSize / 2);
+        
+        ctx.beginPath();
+        ctx.moveTo(lineStart, 0);
+        ctx.lineTo(lineEnd, 0);
+        ctx.stroke();
+    
+        ctx.restore();
+    }
 }
 
 class Diode extends Block {
     update() {
         this.power = this.getNeighborPower((this.rotation + 2) % 4) > 0 ? 1 : 0;
+    }
+
+    render(x, y, isPreview) {
+        const center = cellSize / 2;
+        const baseSize = cellSize * 0.5;
+        
+        ctx.save();
+        ctx.translate(x + center, y + center);
+        ctx.rotate((this.rotation - 1) * Math.PI / 2);
+    
+        // Full tile rounded base
+        ctx.fillStyle = "#333";
+        ctx.beginPath();
+        ctx.roundRect(
+            -cellSize/2,
+            -cellSize/2,
+            cellSize,
+            cellSize,
+            cellSize * 0.15 // corner radius
+        );
+        ctx.fill();
+    
+        // Inner Triangle (Power Indicator)
+        ctx.fillStyle = this.power ? "#ff4d4d" : "#441111";
+        const inner = baseSize * 0.7;
+        ctx.beginPath();
+        ctx.moveTo(-inner, -inner);
+        ctx.lineTo(inner, 0);
+        ctx.lineTo(-inner, inner);
+        ctx.fill();
+    
+        ctx.restore();
     }
 }
 
@@ -375,6 +508,38 @@ class Switch extends Block {
         this.power = this.power === 1 ? 0 : 1;
         dirtyBlocks.add(this.y * gridWidth + this.x);
         this.dirtyNeighbors();
+    }
+
+    render(x, y, isPreview) {
+        const center = cellSize / 2;
+            
+        ctx.save();
+        ctx.translate(x + center, y + center);
+        ctx.rotate((this.rotation - 1) * Math.PI / 2);
+    
+        // Full tile rounded base
+        ctx.fillStyle = "#333";
+        ctx.beginPath();
+        ctx.roundRect(
+            -cellSize/2,
+            -cellSize/2,
+            cellSize,
+            cellSize,
+            cellSize * 0.15 // corner radius
+        );
+        ctx.fill();
+    
+        // Square Indicator
+        ctx.fillStyle = this.power ? "#4dff4d" : "#114411";
+        ctx.beginPath();
+        ctx.fillRect(
+            -cellSize/2 * 0.8,
+            -cellSize/2 * 0.8,
+            cellSize * 0.8,
+            cellSize * 0.8
+        );
+
+        ctx.restore();
     }
 }
 
@@ -391,6 +556,29 @@ class Button extends Block {
         this.power = 0;
         this.dirtyNeighbors();
         dirtyBlocks.add(this.y * gridWidth + this.x);
+    }
+
+    render(x, y, isPreview) {
+        const center = cellSize / 2;
+        const indicatorSize = cellSize * 0.8;
+        
+        ctx.save();
+        ctx.translate(x + center, y + center);
+        ctx.rotate((this.rotation - 1) * Math.PI / 2);
+    
+        // Full tile circle base
+        ctx.fillStyle = "#333";
+        ctx.beginPath();
+        ctx.arc(0, 0, cellSize/2, 0, Math.PI * 2);
+        ctx.fill();
+    
+        // Circle Indicator
+        ctx.fillStyle = this.power ? "#4dff4d" : "#114411";
+        ctx.beginPath();
+        ctx.arc(0, 0, indicatorSize/2, 0, Math.PI * 2);
+        ctx.fill();
+
+        ctx.restore();
     }
 }
 
@@ -436,6 +624,78 @@ class Bridge extends Block {
             this.dirtyNeighbors();
         }
     }
+
+    render(x, y, isPreview) {
+        const cx = x + cellSize / 2;
+        const cy = y + cellSize / 2;
+        const thick = cellSize * 0.2;
+        const len = cellSize * 0.4;
+
+        ctx.lineCap = "round";
+    
+        ctx.save();
+        ctx.translate(cx, cy);
+        ctx.rotate((this.rotation - 1) * Math.PI / 2);
+
+        // Full tile rounded base
+        ctx.fillStyle = "#333";
+        ctx.beginPath();
+        ctx.roundRect(
+            -cellSize/2,
+            -cellSize/2,
+            cellSize,
+            cellSize,
+            cellSize * 0.15 // corner radius
+        );
+        ctx.fill();
+
+        // Lane A (horizontal)
+        ctx.strokeStyle = this.powerH ? "#ff4d4d" : "#441111";
+        ctx.lineWidth = thick;
+        ctx.beginPath();
+        ctx.moveTo(-len, 0);
+        ctx.lineTo(len, 0);
+        ctx.stroke();
+    
+        // Arrow for Lane A (left side)
+        {
+            const triW = cellSize * 0.25;
+            const triH = cellSize * 0.20;
+            const offset = cellSize * 0.5;
+    
+            ctx.fillStyle = this.powerH ? "#ff4d4d" : "#441111";
+            ctx.beginPath();
+            ctx.moveTo(-offset + triW, 0);
+            ctx.lineTo(-offset, -triH);
+            ctx.lineTo(-offset, triH);
+            ctx.closePath();
+            ctx.fill();
+        }
+    
+        // Lane B (vertical)
+        ctx.strokeStyle = this.powerV ? "#ff4d4d" : "#441111";
+        ctx.beginPath();
+        ctx.moveTo(0, -len);
+        ctx.lineTo(0, len);
+        ctx.stroke();
+    
+        // Arrow for Lane B (top side)
+        {
+            const triW = cellSize * 0.25;
+            const triH = cellSize * 0.20;
+            const offset = cellSize * 0.5;
+    
+            ctx.fillStyle = this.powerV ? "#ff4d4d" : "#441111";
+            ctx.beginPath();
+            ctx.moveTo(0, -offset + triW);
+            ctx.lineTo(-triH, -offset);
+            ctx.lineTo(triH, -offset);
+            ctx.closePath();
+            ctx.fill();
+        }
+    
+        ctx.restore();
+    }
 }
 
 class Lamp extends Block {
@@ -454,6 +714,38 @@ class Lamp extends Block {
         if (this.power !== this.lastPower) {
             this.dirtyNeighbors();
         }
+    }
+
+    render(x, y, isPreview) {
+        const cx = x + cellSize / 2;
+        const cy = y + cellSize / 2;
+
+        const colorMap = {
+            red: this.power ? "#ff4d4d" : "#000000",
+            green: this.power ? "#4dff4d" : "#000000",
+            blue: this.power ? "#4d4dff" : "#000000",
+            white: this.power ? "#ffffff" : "#000000",
+            black: this.power ? "#444444" : "#000000"
+        };
+    
+        ctx.save();
+        ctx.translate(cx, cy);
+        ctx.rotate((this.rotation - 1) * Math.PI / 2);
+    
+        // Body (full cell)
+        ctx.fillStyle = colorMap[this.color];
+        ctx.fillRect(-cellSize/2, -cellSize/2, cellSize, cellSize);
+    
+        // Input indicator
+        const inputColor = this.power ? "#ff4d4d" : "#441111"; 
+        ctx.fillStyle = inputColor;
+        ctx.beginPath();
+        ctx.moveTo(-cellSize*0.5 + cellSize*0.2, 0);
+        ctx.lineTo(-cellSize*0.5, -cellSize*0.15);
+        ctx.lineTo(-cellSize*0.5, cellSize*0.15);
+        ctx.fill();
+    
+        ctx.restore();
     }
 }
 
@@ -486,6 +778,51 @@ class Toggle extends Block {
             this.dirtyNeighbors();
         }
     }
+
+    render(x, y, isPreview) {
+        const cx = x + cellSize / 2;
+        const cy = y + cellSize / 2;
+    
+        ctx.save();
+        ctx.translate(cx, cy);
+        // Base rotation for the block direction
+        ctx.rotate((this.rotation - 1) * Math.PI / 2);
+    
+        // Full tile rounded base
+        ctx.fillStyle = "#333";
+        ctx.beginPath();
+        ctx.roundRect(-cellSize/2, -cellSize/2, cellSize, cellSize, cellSize * 0.15);
+        ctx.fill();
+
+        ctx.save();
+        ctx.rotate(Math.PI / 4); // Rotate 45 degrees to make it an X
+        
+        const barLen = cellSize * 0.35;
+        const barThick = cellSize * 0.18;
+        const stateColor = this.power ? "#ff4d4d" : "#441111";
+        ctx.fillStyle = stateColor;
+    
+        // Horizontal bar of the X
+        ctx.beginPath();
+        ctx.roundRect(-barLen, -barThick/2, barLen*2, barThick, barThick/2);
+        ctx.fill();
+        // Vertical bar of the X
+        ctx.beginPath();
+        ctx.roundRect(-barThick/2, -barLen, barThick, barLen*2, barThick/2);
+        ctx.fill();
+        ctx.restore();
+
+        // Input indicator
+        const inputColor = this.lastInput ? "#ff4d4d" : "#441111"; 
+        ctx.fillStyle = inputColor;
+        ctx.beginPath();
+        ctx.moveTo(-cellSize*0.5 + cellSize*0.2, 0);
+        ctx.lineTo(-cellSize*0.5, -cellSize*0.15);
+        ctx.lineTo(-cellSize*0.5, cellSize*0.15);
+        ctx.fill();
+    
+        ctx.restore();
+    }
 }
 
 class HoverSensor extends Block {
@@ -506,6 +843,37 @@ class HoverSensor extends Block {
     }
 
     interact() {}
+
+    render(x, y, isPreview) {
+        const center = cellSize / 2;
+        const ringOuter = cellSize * 0.35;
+        const ringWidth = cellSize * 0.12;
+    
+        ctx.save();
+        ctx.translate(x + center, y + center);
+        ctx.rotate((this.rotation - 1) * Math.PI / 2);
+    
+        // Full tile rounded base
+        ctx.fillStyle = "#333";
+        ctx.beginPath();
+        ctx.roundRect(
+            -cellSize/2,
+            -cellSize/2,
+            cellSize,
+            cellSize,
+            cellSize * 0.15
+        );
+        ctx.fill();
+    
+        // Donut indicator ring
+        ctx.strokeStyle = this.power ? "#00ff00" : "#225522";
+        ctx.lineWidth = ringWidth;
+        ctx.beginPath();
+        ctx.arc(0, 0, ringOuter, 0, Math.PI * 2);
+        ctx.stroke();
+    
+        ctx.restore();
+    }
 }
 
 class Delay extends Block {
@@ -550,7 +918,66 @@ class Delay extends Block {
             dirtyBlocks.add(this.y * gridWidth + this.x);
             this.dirtyNeighbors();
         }
-    }    
+    }
+
+    render(x, y, isPreview) {
+        const cx = x + cellSize / 2;
+        const cy = y + cellSize / 2;
+        ctx.save();
+        ctx.translate(cx, cy);
+        ctx.rotate((this.rotation - 1) * Math.PI / 2);
+    
+        // Full tile rounded base
+        ctx.fillStyle = "#333";
+        ctx.beginPath();
+        ctx.roundRect(-cellSize/2, -cellSize/2, cellSize, cellSize, cellSize * 0.15);
+        ctx.fill();
+    
+        // --- Balanced Segment Math ---
+        const gap = 3; 
+        const margin = gap / 2; 
+        const segWidth = (cellSize - (gap * this.delayAmount)) / this.delayAmount;
+        const startX = -cellSize / 2 + margin;
+    
+        this.history.forEach((state, i) => {
+            const xPos = startX + i * (segWidth + gap);
+        
+            // --- TRAPEZOID MATH ---
+            // Calculate heights for the LEFT and RIGHT side of this specific segment
+            const leftPct = i / this.delayAmount;
+            const rightPct = (i + 1) / this.delayAmount;
+            
+            // Taper from 0.7 (Input side) down to 0.2 (Output side)
+            const hLeft = cellSize * (0.7 - (leftPct * 0.5));
+            const hRight = cellSize * (0.7 - (rightPct * 0.5));
+        
+            const drawSegment = () => {
+                ctx.beginPath();
+                // Top Left
+                ctx.moveTo(xPos, -hLeft / 2);
+                // Top Right
+                ctx.lineTo(xPos + segWidth, -hRight / 2);
+                // Bottom Right
+                ctx.lineTo(xPos + segWidth, hRight / 2);
+                // Bottom Left
+                ctx.lineTo(xPos, hLeft / 2);
+                ctx.closePath();
+                ctx.fill();
+            };
+        
+            // 1. Inactive Slot
+            ctx.fillStyle = "#441111"; 
+            drawSegment();
+        
+            // 2. Active Segment (Solid High-Contrast)
+            if (state) {
+                ctx.fillStyle = "#ff4d4d"; 
+                drawSegment();
+            }
+        });            
+    
+        ctx.restore();
+    }
 }
 
 class KeyBlock extends Block {
@@ -589,6 +1016,32 @@ class KeyBlock extends Block {
         // Keep it "awake" while binding so the UI updates
         if (this.isBinding) dirtyBlocks.add(this.y * gridWidth + this.x);
     }
+
+    render(x, y, isPreview) {
+        const cx = x + cellSize / 2;
+        const cy = y + cellSize / 2;
+        ctx.save();
+    
+        ctx.translate(cx, cy);
+        ctx.rotate((this.rotation - 1) * Math.PI / 2);
+        
+        ctx.beginPath();
+        ctx.fillStyle = this.isBinding ? "#fff" : "#333";
+        ctx.roundRect(-cellSize/2, -cellSize/2, cellSize, cellSize, cellSize * 0.15);
+        ctx.fill();
+    
+        ctx.fillStyle = this.power ? "#ff4d4d" : (this.isBinding ? "#000" : "#441111");
+        ctx.font = `bold ${cellSize * 0.4}px monospace`;
+        ctx.textAlign = "center";
+        ctx.textBaseline = "middle";
+        
+        let displayKey = this.isBinding ? "?" : (this.targetKey || "?");
+        if (displayKey === " ") displayKey = "SPC";
+        
+        ctx.fillText(displayKey, 0, 0);
+    
+        ctx.restore();
+    }
 }
 
 class Transmitter extends Block {
@@ -622,7 +1075,38 @@ class Transmitter extends Block {
         }
         
         this.power = 0; 
-    }    
+    }
+
+    render(x, y, isPreview) {
+        const cx = x + cellSize / 2;
+        const cy = y + cellSize / 2;
+        ctx.save();
+        ctx.translate(cx, cy);
+    
+        ctx.fillStyle = "#333";
+        ctx.beginPath();
+        ctx.roundRect(-cellSize/2, -cellSize/2, cellSize, cellSize, cellSize * 0.15);
+        ctx.fill();
+    
+        // ONLY glow if THIS specific block is powered
+        const active = this.isTransmitting;
+        ctx.strokeStyle = active ? "#ff4d4d" : "#441111";
+        ctx.lineWidth = cellSize * 0.05;
+    
+        for(let i = 1; i <= 3; i++) {
+            ctx.beginPath();
+            ctx.arc(0, 0, (cellSize * 0.1) + (i * cellSize * 0.12), 0, Math.PI * 2);
+            ctx.stroke();
+        }
+    
+        ctx.fillStyle = "#fff";
+        ctx.font = `bold ${cellSize * 0.5}px monospace`;
+        ctx.textAlign = "center";
+        ctx.textBaseline = "middle";
+        ctx.fillText(this.channel, 0, 0);
+    
+        ctx.restore();
+    }
 }
 
 class Receiver extends Block {
@@ -644,6 +1128,37 @@ class Receiver extends Block {
         if (this.power !== this.lastPower) {
             this.dirtyNeighbors();
         }
+    }
+
+    render(x, y, isPreview) {
+        const cx = x + cellSize / 2;
+        const cy = y + cellSize / 2;
+        ctx.save();
+        ctx.translate(cx, cy);
+    
+        ctx.fillStyle = "#333";
+        ctx.beginPath();
+        ctx.roundRect(-cellSize/2, -cellSize/2, cellSize, cellSize, cellSize * 0.15);
+        ctx.fill();
+    
+        const isReceiving = wirelessChannels[this.channel] > 0;
+        ctx.strokeStyle = isReceiving ? "#ff4d4d" : "#441111";
+        ctx.lineWidth = cellSize * 0.05;
+    
+        for(let i = 1; i <= 3; i++) {
+            const s = (cellSize * 0.25) + (i * cellSize * 0.15);
+            ctx.globalAlpha = 1.0 - (i * 0.2);
+            ctx.strokeRect(-s/2, -s/2, s, s);
+        }
+        ctx.globalAlpha = 1.0;
+    
+        ctx.fillStyle = "#fff";
+        ctx.font = `bold ${cellSize * 0.5}px monospace`;
+        ctx.textAlign = "center";
+        ctx.textBaseline = "middle";
+        ctx.fillText(this.channel, 0, 0);
+    
+        ctx.restore();
     }
 }
 
@@ -670,6 +1185,41 @@ class Random extends Block {
         
         // If input is high, keep it awake to detect the next pulse
         if (inputPower === 1) dirtyBlocks.add(this.y * gridWidth + this.x);
+    }
+
+    render(x, y, isPreview) {
+        const cx = x + cellSize / 2;
+        const cy = y + cellSize / 2;
+        ctx.save();
+        ctx.translate(cx, cy);
+
+       
+    
+        ctx.fillStyle = "#333";
+        ctx.beginPath();
+        ctx.roundRect(-cellSize/2, -cellSize/2, cellSize, cellSize, cellSize * 0.15);
+        ctx.fill();
+    
+        ctx.fillStyle = this.power ? "#ff4d4d" : "#441111";
+        ctx.font = `bold ${cellSize * 0.6}px monospace`;
+        ctx.textAlign = "center";
+        ctx.textBaseline = "middle";
+        ctx.fillText("?", 0, 0);
+
+        ctx.save();
+        ctx.rotate((this.rotation - 1) * Math.PI / 2);
+    
+        // Input indicator
+        const inputColor = this.lastInput ? "#ff4d4d" : "#441111"; 
+        ctx.fillStyle = inputColor;
+        ctx.beginPath();
+        ctx.moveTo(-cellSize*0.5 + cellSize*0.2, 0);
+        ctx.lineTo(-cellSize*0.5, -cellSize*0.15);
+        ctx.lineTo(-cellSize*0.5, cellSize*0.15);
+        ctx.fill();
+    
+        ctx.restore();
+        ctx.restore();
     }
 }
 
@@ -699,6 +1249,49 @@ class Trigger extends Block {
             dirtyBlocks.add(this.y * gridWidth + this.x);
         }
     }
+
+    render(x, y, isPreview) {
+        const cx = x + cellSize / 2;
+        const cy = y + cellSize / 2;
+        ctx.save();
+        ctx.translate(cx, cy);
+    
+        // 1. Base
+        ctx.fillStyle = "#333";
+        ctx.beginPath();
+        ctx.roundRect(-cellSize/2, -cellSize/2, cellSize, cellSize, cellSize * 0.15);
+        ctx.fill();
+    
+        // 2. Pulse Icon (The "Rising Edge" Spike)
+        ctx.strokeStyle = this.power ? "#ff4d4d" : "#441111";
+        ctx.lineWidth = cellSize * 0.1;
+        ctx.lineCap = "round";
+        ctx.lineJoin = "round";
+    
+        ctx.beginPath();
+        // Flat line -> Spike -> Flat line
+        ctx.moveTo(-cellSize * 0.3, cellSize * 0.15);
+        ctx.lineTo(-cellSize * 0.1, cellSize * 0.15);
+        ctx.lineTo(0, -cellSize * 0.25);
+        ctx.lineTo(cellSize * 0.1, cellSize * 0.15);
+        ctx.lineTo(cellSize * 0.3, cellSize * 0.15);
+        ctx.stroke();
+
+        ctx.save();
+        ctx.rotate((this.rotation - 1) * Math.PI / 2);
+    
+        // Input indicator
+        const inputColor = this.lastInput ? "#ff4d4d" : "#441111"; 
+        ctx.fillStyle = inputColor;
+        ctx.beginPath();
+        ctx.moveTo(-cellSize*0.5 + cellSize*0.2, 0);
+        ctx.lineTo(-cellSize*0.5, -cellSize*0.15);
+        ctx.lineTo(-cellSize*0.5, cellSize*0.15);
+        ctx.fill();
+    
+        ctx.restore();
+        ctx.restore();
+    }
 }
 
 class PowerBlock extends Block {
@@ -709,6 +1302,30 @@ class PowerBlock extends Block {
     }
 
     update() {}
+
+    render(x, y, isPreview) {
+        const cx = x + cellSize / 2;
+        const cy = y + cellSize / 2;
+
+        const colorMap = {
+            red: this.power ? "#ff4d4d" : "#441111",
+            green: this.power ? "#4dff4d" : "#114411",
+            blue: this.power ? "#4d4dff" : "#111144",
+            white: this.power ? "#ffffff" : "#555555",
+            black: this.power ? "#000000" : "#000000"
+        };
+
+        ctx.save();
+        ctx.translate(cx, cy);
+        ctx.rotate((this.rotation - 1) * Math.PI / 2);
+        
+        ctx.fillStyle = colorMap[this.color] || "ff4d4d";
+        ctx.beginPath();
+        ctx.roundRect(-cellSize/2, -cellSize/2, cellSize, cellSize, cellSize * 0.15);
+        ctx.fill();
+
+        ctx.restore();
+    }
 }
 
 class NoteBlock extends Block {
@@ -791,6 +1408,46 @@ class NoteBlock extends Block {
         // Keep it "awake" while powered to ensure it can detect the shut-off
         if (inputPower === 1) dirtyBlocks.add(this.y * gridWidth + this.x);
     }
+
+    render(x, y, isPreview) {
+        const cx = x + cellSize / 2;
+        const cy = y + cellSize / 2;
+        ctx.save();
+        ctx.translate(cx, cy);
+        
+        // Base
+        ctx.fillStyle = "#333";
+        ctx.beginPath();
+        ctx.roundRect(-cellSize/2, -cellSize/2, cellSize, cellSize, cellSize * 0.15);
+        ctx.fill();
+    
+        // Note Name
+        const info = getNoteInfo(this.noteIndex);
+        ctx.fillStyle = this.power ? "#ff4d4d" : "#888";
+        ctx.font = `bold ${cellSize * 0.35}px monospace`;
+        ctx.textAlign = "center";
+        ctx.fillText(info.name, 0, cellSize * 0.2);
+    
+        // Icon
+        ctx.font = `${cellSize * 0.4}px serif`;
+        ctx.fillText("♪", 0, -cellSize * 0.15);
+
+        ctx.save();
+        ctx.rotate((this.rotation - 1) * Math.PI / 2);
+
+        // Input indicator
+        const inputColor = this.lastInput ? "#ff4d4d" : "#441111"; 
+        ctx.fillStyle = inputColor;
+        ctx.beginPath();
+        ctx.moveTo(-cellSize*0.5 + cellSize*0.2, 0);
+        ctx.lineTo(-cellSize*0.5, -cellSize*0.15);
+        ctx.lineTo(-cellSize*0.5, cellSize*0.15);
+        ctx.fill();
+
+        ctx.restore()
+    
+        ctx.restore();
+    }
 }
 
 class Comment extends Block {
@@ -816,6 +1473,33 @@ class Comment extends Block {
             
             this.lastPower = this.power;
         }
+    }
+
+    render(x, y, isPreview) {
+        const cx = x + cellSize / 2;
+        const cy = y + cellSize / 2;
+
+        ctx.save();
+        ctx.translate(cx, cy);
+        
+        // Base
+        ctx.fillStyle = "#333";
+        ctx.beginPath();
+        ctx.roundRect(-cellSize/2, -cellSize/2, cellSize, cellSize, cellSize * 0.15);
+        ctx.fill();
+    
+        ctx.strokeStyle = this.power === 1 ? "#ff4d4d" : "#441111";
+        ctx.lineWidth = cellSize * 0.1;
+        for(let i = -1; i <= 1; i++) {
+            ctx.beginPath();
+            // Move to the LEFT side of center
+            ctx.moveTo(-cellSize * 0.4, i * cellSize * 0.2);
+            ctx.lineTo(cellSize * 0.4, i * cellSize * 0.2); 
+            ctx.stroke();
+        }
+
+
+        ctx.restore();
     }
 }
 
@@ -864,6 +1548,60 @@ class Rotator extends Block {
             dirtyBlocks.add(ny * gridWidth + nx);
             target.dirtyNeighbors();
         }
+    }
+
+    render(x, y, isPreview) {
+        const cx = x + cellSize / 2;
+        const cy = y + cellSize / 2;
+        ctx.save();
+        ctx.translate(cx, cy);
+        
+        // Rotate the whole icon based on the block's orientation
+        ctx.rotate((this.rotation - 1) * Math.PI / 2);
+    
+        // 1. Base
+        ctx.fillStyle = "#333";
+        ctx.beginPath();
+        ctx.roundRect(-cellSize/2, -cellSize/2, cellSize, cellSize, cellSize * 0.15);
+        ctx.fill();
+    
+        // 2. The Arc (Offset by 45 degrees)
+        ctx.strokeStyle = this.power ? "#ff4d4d" : "#441111";
+        ctx.lineWidth = cellSize * 0.1;
+        ctx.lineCap = "round";
+        
+        const startAngle = -Math.PI / 2 + Math.PI / 4;
+        const endAngle = Math.PI / 2 - Math.PI / 4;
+    
+        ctx.beginPath();
+        ctx.arc(0, 0, cellSize * 0.25, startAngle, endAngle);
+        ctx.stroke();
+    
+        // 3. The Tip (Circle/Knob)
+        ctx.fillStyle = this.power ? "#ff4d4d" : "#441111";
+        
+        ctx.save();
+        // Position at Top end if CCW, Bottom end if CW
+        const targetAngle = this.isCCW ? startAngle : endAngle;
+        ctx.rotate(targetAngle);
+        ctx.translate(cellSize * 0.25, 0);
+    
+        // Draw Circle instead of Triangle
+        ctx.beginPath();
+        ctx.arc(0, 0, cellSize * 0.12, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.restore();
+    
+        // Input indicator
+        const inputColor = this.lastInput ? "#ff4d4d" : "#441111"; 
+        ctx.fillStyle = inputColor;
+        ctx.beginPath();
+        ctx.moveTo(-cellSize*0.5 + cellSize*0.2, 0);
+        ctx.lineTo(-cellSize*0.5, -cellSize*0.15);
+        ctx.lineTo(-cellSize*0.5, cellSize*0.15);
+        ctx.fill();
+    
+        ctx.restore();
     }
 }
 
@@ -1168,705 +1906,13 @@ function render() {
         ctx.beginPath(); ctx.moveTo(0, i * cellSize); ctx.lineTo(canvas.width, i * cellSize); ctx.stroke();
     }
 
+    // Draw blocks
     grid.forEach((block, i) => {
-        if (!block) return;
-        const x = block.x * cellSize;
-        const y = block.y * cellSize;
-
-        if (block instanceof Wire) {
-            const colorMap = {
-                red: block.power ? "#ff4d4d" : "#441111",
-                green: block.power ? "#4dff4d" : "#114411",
-                blue: block.power ? "#4d4dff" : "#111144",
-                white: block.power ? "#ffffff" : "#555555",
-                black: block.power ? "#000000" : "#000000"
-            };
-            
-            ctx.strokeStyle = colorMap[block.color];
-            ctx.lineWidth = cellSize * 0.2;
-            ctx.lineCap = "round";
-        
-            const centerX = x + cellSize / 2;
-            const centerY = y + cellSize / 2;
-        
-            // Draw central dot
-            ctx.fillStyle = ctx.strokeStyle;
-            ctx.beginPath();
-            ctx.arc(centerX, centerY, ctx.lineWidth / 2, 0, Math.PI * 2);
-            ctx.fill();
-        
-            // Check 4 neighbors and draw lines to them if they are wires or components
-            const neighbors = [
-                { n: block.getNeighbor(0), dx: 0, dy: -cellSize / 2 }, // Up
-                { n: block.getNeighbor(1), dx: cellSize / 2, dy: 0 },  // Right
-                { n: block.getNeighbor(2), dx: 0, dy: cellSize / 2 },  // Down
-                { n: block.getNeighbor(3), dx: -cellSize / 2, dy: 0 }  // Left
-            ];
-        
-            neighbors.forEach(neighbor => {
-                if (!neighbor.n) return; 
-
-                const isWire = neighbor.n instanceof Wire;
-                const connects = isWire && (
-                    block.color === "white" || 
-                    neighbor.n.color === "white" || 
-                    block.color === neighbor.n.color
-                );
-                
-                const isComponent = !isWire && (block.color !== "black"); 
-                if (connects || isComponent) {
-                    ctx.beginPath();
-                    ctx.moveTo(centerX, centerY);
-                    ctx.lineTo(centerX + neighbor.dx, centerY + neighbor.dy);
-                    ctx.stroke();
-                }
-            });
-        } else if (block instanceof Inverter) {
-            const center = cellSize / 2;
-            const baseWidth = cellSize * 0.6;
-            const indicatorSize = cellSize * 0.2;
-            const gap = cellSize * 0.15;
-            const margin = cellSize * 0.0;
-        
-            ctx.save();
-            ctx.translate(x + center, y + center);
-            ctx.rotate((block.rotation - 1) * Math.PI / 2);
-        
-            ctx.fillStyle = "#333";
-            const baseL = cellSize - (margin * 2);
-            ctx.beginPath();
-            ctx.roundRect(-baseL/2, -baseWidth/2, baseL, baseWidth, cellSize * 0.1);
-            ctx.fill();
-        
-            const outputColor = block.power ? "#ff4d4d" : "#441111";
-            const inputColor = !block.power ? "#ff4d4d" : "#441111";
-        
-            // Input triangle (Back)
-            ctx.fillStyle = inputColor;
-            const triW = indicatorSize * 1;
-            const triH = indicatorSize * 0.9;
-            const triX = -baseL/2 + indicatorSize * 0.5;
-
-            ctx.beginPath();
-            ctx.moveTo(triX + triW, 0);
-            ctx.lineTo(triX, -triH);
-            ctx.lineTo(triX, triH);
-            ctx.closePath();
-            ctx.fill();
-
-            // Output line (Front)
-            ctx.strokeStyle = outputColor;
-            ctx.lineWidth = indicatorSize;
-            ctx.lineCap = "butt";
-            
-            const lineStart = triX + (indicatorSize / 2) + gap;
-            const lineEnd = baseL / 2 - (indicatorSize / 2);
-            
-            ctx.beginPath();
-            ctx.moveTo(lineStart, 0);
-            ctx.lineTo(lineEnd, 0);
-            ctx.stroke();
-        
-            ctx.restore();
-        } else if (block instanceof Diode) {
-            const center = cellSize / 2;
-            const baseSize = cellSize * 0.5;
-            
-            ctx.save();
-            ctx.translate(x + center, y + center);
-            ctx.rotate((block.rotation - 1) * Math.PI / 2);
-        
-            // Full tile rounded base
-            ctx.fillStyle = "#333";
-            ctx.beginPath();
-            ctx.roundRect(
-                -cellSize/2,
-                -cellSize/2,
-                cellSize,
-                cellSize,
-                cellSize * 0.15 // corner radius
-            );
-            ctx.fill();
-        
-            // Inner Triangle (Power Indicator)
-            ctx.fillStyle = block.power ? "#ff4d4d" : "#441111";
-            const inner = baseSize * 0.7;
-            ctx.beginPath();
-            ctx.moveTo(-inner, -inner);
-            ctx.lineTo(inner, 0);
-            ctx.lineTo(-inner, inner);
-            ctx.fill();
-        
-            ctx.restore();
-        } else if (block instanceof Switch) {
-            const center = cellSize / 2;
-            const baseSize = cellSize * 0.5;
-            
-            ctx.save();
-            ctx.translate(x + center, y + center);
-            ctx.rotate((block.rotation - 1) * Math.PI / 2);
-        
-            // Full tile rounded base
-            ctx.fillStyle = "#333";
-            ctx.beginPath();
-            ctx.roundRect(
-                -cellSize/2,
-                -cellSize/2,
-                cellSize,
-                cellSize,
-                cellSize * 0.15 // corner radius
-            );
-            ctx.fill();
-        
-            // Square Indicator
-            ctx.fillStyle = block.power ? "#00ff00" : "#225522";
-            ctx.beginPath();
-            ctx.fillRect(
-                -cellSize/2 * 0.8,
-                -cellSize/2 * 0.8,
-                cellSize * 0.8,
-                cellSize * 0.8
-            );
-
-            ctx.restore();
-        } else if (block instanceof Button) {
-            const center = cellSize / 2;
-            const indicatorSize = cellSize * 0.8;
-            
-            ctx.save();
-            ctx.translate(x + center, y + center);
-            ctx.rotate((block.rotation - 1) * Math.PI / 2);
-        
-            // Full tile circle base
-            ctx.fillStyle = "#333";
-            ctx.beginPath();
-            ctx.arc(0, 0, cellSize/2, 0, Math.PI * 2);
-            ctx.fill();
-        
-            // Circle Indicator
-            ctx.fillStyle = block.power ? "#00ff00" : "#225522";
-            ctx.beginPath();
-            ctx.arc(0, 0, indicatorSize/2, 0, Math.PI * 2);
-            ctx.fill();
-
-            ctx.restore();
-            
-            
-        } else if (block instanceof Bridge) {
-            const cx = x + cellSize / 2;
-            const cy = y + cellSize / 2;
-            const thick = cellSize * 0.2;
-            const len = cellSize * 0.4;
-
-            ctx.lineCap = "round"
-        
-            ctx.save();
-            ctx.translate(cx, cy);
-            ctx.rotate((block.rotation - 1) * Math.PI / 2);
-
-            // Full tile rounded base
-            ctx.fillStyle = "#333";
-            ctx.beginPath();
-            ctx.roundRect(
-                -cellSize/2,
-                -cellSize/2,
-                cellSize,
-                cellSize,
-                cellSize * 0.15 // corner radius
-            );
-            ctx.fill();
-
-            // Lane A (horizontal)
-            ctx.strokeStyle = block.powerH ? "#ff4d4d" : "#441111";
-            ctx.lineWidth = thick;
-            ctx.beginPath();
-            ctx.moveTo(-len, 0);
-            ctx.lineTo(len, 0);
-            ctx.stroke();
-        
-            // Arrow for Lane A (left side)
-            {
-                const triW = cellSize * 0.25;
-                const triH = cellSize * 0.20;
-                const offset = cellSize * 0.5;
-        
-                ctx.fillStyle = block.powerH ? "#ff4d4d" : "#441111";
-                ctx.beginPath();
-                ctx.moveTo(-offset + triW, 0);
-                ctx.lineTo(-offset, -triH);
-                ctx.lineTo(-offset, triH);
-                ctx.closePath();
-                ctx.fill();
-            }
-        
-            // Lane B (vertical)
-            ctx.strokeStyle = block.powerV ? "#ff4d4d" : "#441111";
-            ctx.beginPath();
-            ctx.moveTo(0, -len);
-            ctx.lineTo(0, len);
-            ctx.stroke();
-        
-            // Arrow for Lane B (top side)
-            {
-                const triW = cellSize * 0.25;
-                const triH = cellSize * 0.20;
-                const offset = cellSize * 0.5;
-        
-                ctx.fillStyle = block.powerV ? "#ff4d4d" : "#441111";
-                ctx.beginPath();
-                ctx.moveTo(0, -offset + triW);
-                ctx.lineTo(-triH, -offset);
-                ctx.lineTo(triH, -offset);
-                ctx.closePath();
-                ctx.fill();
-            }
-        
-            ctx.restore();
-        } else if (block instanceof Lamp) {
-            const cx = x + cellSize / 2;
-            const cy = y + cellSize / 2;
-
-            const colorMap = {
-                red: block.power ? "#ff4d4d" : "#000000",
-                green: block.power ? "#4dff4d" : "#000000",
-                blue: block.power ? "#4d4dff" : "#000000",
-                white: block.power ? "#ffffff" : "#000000",
-                black: block.power ? "#444444" : "#000000"
-            };
-        
-            ctx.save();
-            ctx.translate(cx, cy);
-            ctx.rotate((block.rotation - 1) * Math.PI / 2);
-        
-            // Body (full cell)
-            ctx.fillStyle = colorMap[block.color];
-            ctx.fillRect(-cellSize/2, -cellSize/2, cellSize, cellSize);
-        
-            // Input indicator
-            const inputColor = block.power ? "#ff4d4d" : "#441111"; 
-            ctx.fillStyle = inputColor;
-            ctx.beginPath();
-            ctx.moveTo(-cellSize*0.5 + cellSize*0.2, 0);
-            ctx.lineTo(-cellSize*0.5, -cellSize*0.15);
-            ctx.lineTo(-cellSize*0.5, cellSize*0.15);
-            ctx.fill();
-        
-            ctx.restore();
-        } else if (block instanceof Toggle) {
-            const cx = x + cellSize / 2;
-            const cy = y + cellSize / 2;
-        
-            ctx.save();
-            ctx.translate(cx, cy);
-            // Base rotation for the block direction
-            ctx.rotate((block.rotation - 1) * Math.PI / 2);
-        
-            // Full tile rounded base
-            ctx.fillStyle = "#333";
-            ctx.beginPath();
-            ctx.roundRect(-cellSize/2, -cellSize/2, cellSize, cellSize, cellSize * 0.15);
-            ctx.fill();
-
-            ctx.save();
-            ctx.rotate(Math.PI / 4); // Rotate 45 degrees to make it an X
-            
-            const barLen = cellSize * 0.35;
-            const barThick = cellSize * 0.18;
-            const stateColor = block.power ? "#ff4d4d" : "#441111";
-            ctx.fillStyle = stateColor;
-        
-            // Horizontal bar of the X
-            ctx.beginPath();
-            ctx.roundRect(-barLen, -barThick/2, barLen*2, barThick, barThick/2);
-            ctx.fill();
-            // Vertical bar of the X
-            ctx.beginPath();
-            ctx.roundRect(-barThick/2, -barLen, barThick, barLen*2, barThick/2);
-            ctx.fill();
-            ctx.restore();
-
-            // Input indicator
-            const inputColor = block.lastInput ? "#ff4d4d" : "#441111"; 
-            ctx.fillStyle = inputColor;
-            ctx.beginPath();
-            ctx.moveTo(-cellSize*0.5 + cellSize*0.2, 0);
-            ctx.lineTo(-cellSize*0.5, -cellSize*0.15);
-            ctx.lineTo(-cellSize*0.5, cellSize*0.15);
-            ctx.fill();
-        
-            ctx.restore();
-        } else if (block instanceof HoverSensor) {
-            const center = cellSize / 2;
-            const ringOuter = cellSize * 0.35;
-            const ringWidth = cellSize * 0.12;
-        
-            ctx.save();
-            ctx.translate(x + center, y + center);
-            ctx.rotate((block.rotation - 1) * Math.PI / 2);
-        
-            // Full tile rounded base
-            ctx.fillStyle = "#333";
-            ctx.beginPath();
-            ctx.roundRect(
-                -cellSize/2,
-                -cellSize/2,
-                cellSize,
-                cellSize,
-                cellSize * 0.15
-            );
-            ctx.fill();
-        
-            // Donut indicator ring
-            ctx.strokeStyle = block.power ? "#00ff00" : "#225522";
-            ctx.lineWidth = ringWidth;
-            ctx.beginPath();
-            ctx.arc(0, 0, ringOuter, 0, Math.PI * 2);
-            ctx.stroke();
-        
-            ctx.restore();
-        } else if (block instanceof Delay) {
-            const cx = x + cellSize / 2;
-            const cy = y + cellSize / 2;
-            ctx.save();
-            ctx.translate(cx, cy);
-            ctx.rotate((block.rotation - 1) * Math.PI / 2);
-        
-            // Full tile rounded base
-            ctx.fillStyle = "#333";
-            ctx.beginPath();
-            ctx.roundRect(-cellSize/2, -cellSize/2, cellSize, cellSize, cellSize * 0.15);
-            ctx.fill();
-        
-            // --- Balanced Segment Math ---
-            const gap = 3; 
-            const margin = gap / 2; 
-            const segWidth = (cellSize - (gap * block.delayAmount)) / block.delayAmount;
-            const startX = -cellSize / 2 + margin;
-        
-            block.history.forEach((state, i) => {
-                const xPos = startX + i * (segWidth + gap);
-            
-                // --- TRAPEZOID MATH ---
-                // Calculate heights for the LEFT and RIGHT side of this specific segment
-                const leftPct = i / block.delayAmount;
-                const rightPct = (i + 1) / block.delayAmount;
-                
-                // Taper from 0.7 (Input side) down to 0.2 (Output side)
-                const hLeft = cellSize * (0.7 - (leftPct * 0.5));
-                const hRight = cellSize * (0.7 - (rightPct * 0.5));
-            
-                const drawSegment = () => {
-                    ctx.beginPath();
-                    // Top Left
-                    ctx.moveTo(xPos, -hLeft / 2);
-                    // Top Right
-                    ctx.lineTo(xPos + segWidth, -hRight / 2);
-                    // Bottom Right
-                    ctx.lineTo(xPos + segWidth, hRight / 2);
-                    // Bottom Left
-                    ctx.lineTo(xPos, hLeft / 2);
-                    ctx.closePath();
-                    ctx.fill();
-                };
-            
-                // 1. Inactive Slot
-                ctx.fillStyle = "#441111"; 
-                drawSegment();
-            
-                // 2. Active Segment (Solid High-Contrast)
-                if (state) {
-                    ctx.fillStyle = "#ff4d4d"; 
-                    drawSegment();
-                }
-            });            
-        
-            ctx.restore();
-        } else if (block instanceof KeyBlock) {
-            const cx = x + cellSize / 2;
-            const cy = y + cellSize / 2;
-            ctx.save();
-        
-            ctx.translate(cx, cy);
-            ctx.rotate((block.rotation - 1) * Math.PI / 2);
-            
-            ctx.beginPath();
-            ctx.fillStyle = block.isBinding ? "#fff" : "#333";
-            ctx.roundRect(-cellSize/2, -cellSize/2, cellSize, cellSize, cellSize * 0.15);
-            ctx.fill();
-        
-            ctx.fillStyle = block.power ? "#ff4d4d" : (block.isBinding ? "#000" : "#441111");
-            ctx.font = `bold ${cellSize * 0.4}px monospace`;
-            ctx.textAlign = "center";
-            ctx.textBaseline = "middle";
-            
-            let displayKey = block.isBinding ? "?" : (block.targetKey || "?");
-            if (displayKey === " ") displayKey = "SPC";
-            
-            ctx.fillText(displayKey, 0, 0);
-        
-            ctx.restore();
-        } else if (block instanceof Transmitter) {
-            const cx = x + cellSize / 2;
-            const cy = y + cellSize / 2;
-            ctx.save();
-            ctx.translate(cx, cy);
-        
-            ctx.fillStyle = "#333";
-            ctx.beginPath();
-            ctx.roundRect(-cellSize/2, -cellSize/2, cellSize, cellSize, cellSize * 0.15);
-            ctx.fill();
-        
-            // ONLY glow if THIS specific block is powered
-            const active = block.isTransmitting;
-            ctx.strokeStyle = active ? "#ff4d4d" : "#441111";
-            ctx.lineWidth = cellSize * 0.05;
-        
-            for(let i = 1; i <= 3; i++) {
-                ctx.beginPath();
-                ctx.arc(0, 0, (cellSize * 0.1) + (i * cellSize * 0.12), 0, Math.PI * 2);
-                ctx.stroke();
-            }
-        
-            ctx.fillStyle = "#fff";
-            ctx.font = `bold ${cellSize * 0.5}px monospace`;
-            ctx.textAlign = "center";
-            ctx.textBaseline = "middle";
-            ctx.fillText(block.channel, 0, 0);
-        
-            ctx.restore();
-        } else if (block instanceof Receiver) {
-            const cx = x + cellSize / 2;
-            const cy = y + cellSize / 2;
-            ctx.save();
-            ctx.translate(cx, cy);
-        
-            ctx.fillStyle = "#333";
-            ctx.beginPath();
-            ctx.roundRect(-cellSize/2, -cellSize/2, cellSize, cellSize, cellSize * 0.15);
-            ctx.fill();
-        
-            const isReceiving = wirelessChannels[block.channel] > 0;
-            ctx.strokeStyle = isReceiving ? "#ff4d4d" : "#441111";
-            ctx.lineWidth = cellSize * 0.05;
-        
-            for(let i = 1; i <= 3; i++) {
-                const s = (cellSize * 0.25) + (i * cellSize * 0.15);
-                ctx.globalAlpha = 1.0 - (i * 0.2);
-                ctx.strokeRect(-s/2, -s/2, s, s);
-            }
-            ctx.globalAlpha = 1.0;
-        
-            ctx.fillStyle = "#fff";
-            ctx.font = `bold ${cellSize * 0.5}px monospace`;
-            ctx.textAlign = "center";
-            ctx.textBaseline = "middle";
-            ctx.fillText(block.channel, 0, 0);
-        
-            ctx.restore();
-        } else if (block instanceof Random) {
-            const cx = x + cellSize / 2;
-            const cy = y + cellSize / 2;
-            ctx.save();
-            ctx.translate(cx, cy);
-            ctx.rotate((block.rotation - 1) * Math.PI / 2);
-        
-            ctx.fillStyle = "#333";
-            ctx.beginPath();
-            ctx.roundRect(-cellSize/2, -cellSize/2, cellSize, cellSize, cellSize * 0.15);
-            ctx.fill();
-        
-            ctx.fillStyle = block.power ? "#ff4d4d" : "#441111";
-            ctx.font = `bold ${cellSize * 0.6}px monospace`;
-            ctx.textAlign = "center";
-            ctx.textBaseline = "middle";
-            ctx.fillText("?", 0, 0);
-        
-            // Input indicator
-            const inputColor = block.lastInput ? "#ff4d4d" : "#441111"; 
-            ctx.fillStyle = inputColor;
-            ctx.beginPath();
-            ctx.moveTo(-cellSize*0.5 + cellSize*0.2, 0);
-            ctx.lineTo(-cellSize*0.5, -cellSize*0.15);
-            ctx.lineTo(-cellSize*0.5, cellSize*0.15);
-            ctx.fill();
-        
-            ctx.restore();
-        } else if (block instanceof Trigger) {
-            const cx = x + cellSize / 2;
-            const cy = y + cellSize / 2;
-            ctx.save();
-            ctx.translate(cx, cy);
-            ctx.rotate((block.rotation - 1) * Math.PI / 2);
-        
-            // 1. Base
-            ctx.fillStyle = "#333";
-            ctx.beginPath();
-            ctx.roundRect(-cellSize/2, -cellSize/2, cellSize, cellSize, cellSize * 0.15);
-            ctx.fill();
-        
-            // 2. Pulse Icon (The "Rising Edge" Spike)
-            ctx.strokeStyle = block.power ? "#ff4d4d" : "#441111";
-            ctx.lineWidth = cellSize * 0.1;
-            ctx.lineCap = "round";
-            ctx.lineJoin = "round";
-        
-            ctx.beginPath();
-            // Flat line -> Spike -> Flat line
-            ctx.moveTo(-cellSize * 0.3, cellSize * 0.15);
-            ctx.lineTo(-cellSize * 0.1, cellSize * 0.15);
-            ctx.lineTo(0, -cellSize * 0.25);
-            ctx.lineTo(cellSize * 0.1, cellSize * 0.15);
-            ctx.lineTo(cellSize * 0.3, cellSize * 0.15);
-            ctx.stroke();
-        
-            // Input indicator
-            const inputColor = block.lastInput ? "#ff4d4d" : "#441111"; 
-            ctx.fillStyle = inputColor;
-            ctx.beginPath();
-            ctx.moveTo(-cellSize*0.5 + cellSize*0.2, 0);
-            ctx.lineTo(-cellSize*0.5, -cellSize*0.15);
-            ctx.lineTo(-cellSize*0.5, cellSize*0.15);
-            ctx.fill();
-        
-            ctx.restore();
-        } else if (block instanceof PowerBlock) {
-            const cx = x + cellSize / 2;
-            const cy = y + cellSize / 2;
-
-            const colorMap = {
-                red: block.power ? "#ff4d4d" : "#441111",
-                green: block.power ? "#4dff4d" : "#114411",
-                blue: block.power ? "#4d4dff" : "#111144",
-                white: block.power ? "#ffffff" : "#555555",
-                black: block.power ? "#000000" : "#000000"
-            };
-
-            ctx.save();
-            ctx.translate(cx, cy);
-            ctx.rotate((block.rotation - 1) * Math.PI / 2);
-            
-            ctx.fillStyle = colorMap[block.color] || "ff4d4d";
-            ctx.beginPath();
-            ctx.roundRect(-cellSize/2, -cellSize/2, cellSize, cellSize, cellSize * 0.15);
-            ctx.fill();
-
-            ctx.restore();
-        } else if (block instanceof NoteBlock) {
-            const cx = x + cellSize / 2;
-            const cy = y + cellSize / 2;
-            ctx.save();
-            ctx.translate(cx, cy);
-            
-            // Base
-            ctx.fillStyle = "#333";
-            ctx.beginPath();
-            ctx.roundRect(-cellSize/2, -cellSize/2, cellSize, cellSize, cellSize * 0.15);
-            ctx.fill();
-        
-            // Note Name
-            const info = getNoteInfo(block.noteIndex);
-            ctx.fillStyle = block.power ? "#ff4d4d" : "#888";
-            ctx.font = `bold ${cellSize * 0.35}px monospace`;
-            ctx.textAlign = "center";
-            ctx.fillText(info.name, 0, cellSize * 0.2);
-        
-            // Icon
-            ctx.font = `${cellSize * 0.4}px serif`;
-            ctx.fillText("♪", 0, -cellSize * 0.15);
-
-            ctx.save();
-            ctx.rotate((block.rotation - 1) * Math.PI / 2);
-
-            // Input indicator
-            const inputColor = block.lastInput ? "#ff4d4d" : "#441111"; 
-            ctx.fillStyle = inputColor;
-            ctx.beginPath();
-            ctx.moveTo(-cellSize*0.5 + cellSize*0.2, 0);
-            ctx.lineTo(-cellSize*0.5, -cellSize*0.15);
-            ctx.lineTo(-cellSize*0.5, cellSize*0.15);
-            ctx.fill();
-
-            ctx.restore()
-        
-            ctx.restore();
-        } else if (block instanceof Comment) {
-            const cx = x + cellSize / 2;
-            const cy = y + cellSize / 2;
-
-            ctx.save();
-            ctx.translate(cx, cy);
-            
-            // Base
-            ctx.fillStyle = "#333";
-            ctx.beginPath();
-            ctx.roundRect(-cellSize/2, -cellSize/2, cellSize, cellSize, cellSize * 0.15);
-            ctx.fill();
-        
-            ctx.strokeStyle = block.power === 1 ? "#ff4d4d" : "#441111";
-            ctx.lineWidth = cellSize * 0.1;
-            for(let i = -1; i <= 1; i++) {
-                ctx.beginPath();
-                // Move to the LEFT side of center
-                ctx.moveTo(-cellSize * 0.4, i * cellSize * 0.2);
-                ctx.lineTo(cellSize * 0.4, i * cellSize * 0.2); 
-                ctx.stroke();
-            }
-
-
-            ctx.restore();
-        } else if (block instanceof Rotator) {
-            const cx = x + cellSize / 2;
-            const cy = y + cellSize / 2;
-            ctx.save();
-            ctx.translate(cx, cy);
-            
-            // Rotate the whole icon based on the block's orientation
-            ctx.rotate((block.rotation - 1) * Math.PI / 2);
-        
-            // 1. Base
-            ctx.fillStyle = "#333";
-            ctx.beginPath();
-            ctx.roundRect(-cellSize/2, -cellSize/2, cellSize, cellSize, cellSize * 0.15);
-            ctx.fill();
-        
-            // 2. The Arc (Offset by 45 degrees)
-            ctx.strokeStyle = block.power ? "#ff4d4d" : "#441111";
-            ctx.lineWidth = cellSize * 0.1;
-            ctx.lineCap = "round";
-            
-            const startAngle = -Math.PI / 2 + Math.PI / 4;
-            const endAngle = Math.PI / 2 - Math.PI / 4;
-        
-            ctx.beginPath();
-            ctx.arc(0, 0, cellSize * 0.25, startAngle, endAngle);
-            ctx.stroke();
-        
-            // 3. The Tip (Circle/Knob)
-            ctx.fillStyle = block.power ? "#ff4d4d" : "#441111";
-            
-            ctx.save();
-            // Position at Top end if CCW, Bottom end if CW
-            const targetAngle = block.isCCW ? startAngle : endAngle;
-            ctx.rotate(targetAngle);
-            ctx.translate(cellSize * 0.25, 0);
-        
-            // Draw Circle instead of Triangle
-            ctx.beginPath();
-            ctx.arc(0, 0, cellSize * 0.12, 0, Math.PI * 2);
-            ctx.fill();
-            ctx.restore();
-        
-            // Input indicator
-            const inputColor = block.lastInput ? "#ff4d4d" : "#441111"; 
-            ctx.fillStyle = inputColor;
-            ctx.beginPath();
-            ctx.moveTo(-cellSize*0.5 + cellSize*0.2, 0);
-            ctx.lineTo(-cellSize*0.5, -cellSize*0.15);
-            ctx.lineTo(-cellSize*0.5, cellSize*0.15);
-            ctx.fill();
-        
-            ctx.restore();
-        }        
+        if (block) {
+            const bx = (i % gridWidth) * cellSize;
+            const by = Math.floor(i / gridWidth) * cellSize;
+            block.render(bx, by, false);
+        }
     });
 }
 
