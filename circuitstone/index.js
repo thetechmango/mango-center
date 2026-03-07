@@ -19,6 +19,7 @@ let dragButton = -1;
 let pressedButton = null;
 let lastInteractedId = null;
 const keysDown = new Set();
+let activeEditingComment = null;
 
 let wirelessChannels = {}; 
 
@@ -43,7 +44,8 @@ function exportToJSON() {
             channel: block.channel,
             delayAmount: block.delayAmount,
             targetKey: block.targetKey,
-            noteIndex: block.noteIndex
+            noteIndex: block.noteIndex,
+            text: block.text
         };
     });
 
@@ -74,7 +76,8 @@ function importFromJSON(event) {
         const constructors = { 
             Wire, Inverter, Diode, Bridge, Switch, Button, 
             PowerBlock, Lamp, Toggle, HoverSensor, Delay, 
-            KeyBlock, Transmitter, Receiver, Random, Trigger, NoteBlock
+            KeyBlock, Transmitter, Receiver, Random, Trigger,
+            NoteBlock, Comment
         };
 
         parsed.data.forEach((b) => {
@@ -130,6 +133,48 @@ function playNote(freq) {
     
     osc.start();
     osc.stop(audioCtx.currentTime + 0.5);
+}
+
+function openCommentEditor(block) {
+    activeEditingComment = block;
+    block.isEditing = true;
+
+    const overlay = document.createElement('div');
+    overlay.id = "comment-overlay";
+    overlay.style = `
+        position: fixed; top: 0; left: 0; width: 100vw; height: 100vh;
+        background: rgba(0,0,0,0.7); display: flex; align-items: center;
+        justify-content: center; z-index: 1000;
+    `;
+
+    const area = document.createElement('textarea');
+    area.value = block.text;
+    area.style = `
+        width: 400px; height: 200px; padding: 20px; border-radius: 8px;
+        background: #111; color: #4dff4d; font-family: monospace;
+        font-size: 16px; border: 4px solid #114411; outline: none;
+    `;
+
+    overlay.onclick = (e) => {
+        if (e.target === overlay) closeCommentEditor(area.value);
+    };
+
+    overlay.appendChild(area);
+    document.body.appendChild(overlay);
+    area.focus();
+}
+
+function closeCommentEditor(val) {
+    if (!activeEditingComment) return;
+    activeEditingComment.text = val;
+    activeEditingComment.isEditing = false;
+
+    const id = activeEditingComment.y * gridWidth + activeEditingComment.x;
+    dirtyBlocks.add(id)
+
+    activeEditingComment = null;
+    document.getElementById("comment-overlay").remove();
+    render();
 }
 
 class Block {
@@ -395,6 +440,7 @@ class Bridge extends Block {
 class Lamp extends Block {
     constructor(x, y, rotation = 0) {
         super(x, y, rotation);
+        this.color = document.getElementById("wire-color").value;
     }
 
     prepareNextTick() {
@@ -746,6 +792,32 @@ class NoteBlock extends Block {
     }
 }
 
+class Comment extends Block {
+    constructor(x, y, rotation = 0) {
+        super(x, y, rotation);
+        this.text = ""; // Default empty
+        this.isEditing = false;
+        this.power = 0;
+        this.lastPower = 0;
+    }
+
+    interact() {
+        if (activeEditingComment) return; // Prevent multiple overlays
+        openCommentEditor(this);
+    }
+
+    update() {
+        const hasText = this.text && this.text.trim().length > 0;
+        this.power = hasText ? 1 : 0;
+
+        if (this.power !== this.lastPower) {
+            this.dirtyNeighbors();
+            
+            this.lastPower = this.power;
+        }
+    }
+}
+
 // Tool Selection
 document.querySelectorAll('.tool').forEach(btn => {
     btn.addEventListener('click', () => {
@@ -757,6 +829,10 @@ document.querySelectorAll('.tool').forEach(btn => {
 
 // Hotkeys for Rotation
 window.addEventListener("keydown", (e) => {
+    if (e.target.tagName === 'TEXTAREA' || e.target.tagName === 'INPUT') {
+        return;
+    }
+
     {
         const key = e.key.toUpperCase();
         if (!keysDown.has(key)) {
@@ -931,6 +1007,7 @@ function handleInteraction(e) {
             else if (currentTool === "random") newBlock = new Random(x, y, currentRotation);
             else if (currentTool === "trigger") newBlock = new Trigger(x, y, currentRotation);
             else if (currentTool === "noteBlock") newBlock = new NoteBlock(x, y, currentRotation);
+            else if (currentTool === "comment") newBlock = new Comment(x, y);
 
             if (newBlock) {
                 grid[id] = newBlock;
@@ -1295,17 +1372,25 @@ function render() {
         } else if (block instanceof Lamp) {
             const cx = x + cellSize / 2;
             const cy = y + cellSize / 2;
+
+            const colorMap = {
+                red: block.power ? "#ff4d4d" : "#000000",
+                green: block.power ? "#4dff4d" : "#000000",
+                blue: block.power ? "#4d4dff" : "#000000",
+                white: block.power ? "#ffffff" : "#000000",
+                black: block.power ? "#444444" : "#000000"
+            };
         
             ctx.save();
             ctx.translate(cx, cy);
             ctx.rotate((block.rotation - 1) * Math.PI / 2);
         
-            // Lamp body (full cell)
-            ctx.fillStyle = block.power ? "#ffffff" : "#000000";
+            // Body (full cell)
+            ctx.fillStyle = colorMap[block.color];
             ctx.fillRect(-cellSize/2, -cellSize/2, cellSize, cellSize);
         
             // Input indicator
-            const inputColor = block.lastInput ? "#ff4d4d" : "#441111"; 
+            const inputColor = block.power ? "#ff4d4d" : "#441111"; 
             ctx.fillStyle = inputColor;
             ctx.beginPath();
             ctx.moveTo(-cellSize*0.5 + cellSize*0.2, 0);
@@ -1650,6 +1735,31 @@ function render() {
 
             ctx.restore()
         
+            ctx.restore();
+        } else if (block instanceof Comment) {
+            const cx = x + cellSize / 2;
+            const cy = y + cellSize / 2;
+
+            ctx.save();
+            ctx.translate(cx, cy);
+            
+            // Base
+            ctx.fillStyle = "#333";
+            ctx.beginPath();
+            ctx.roundRect(-cellSize/2, -cellSize/2, cellSize, cellSize, cellSize * 0.15);
+            ctx.fill();
+        
+            ctx.strokeStyle = block.power === 1 ? "#ff4d4d" : "#441111";
+            ctx.lineWidth = cellSize * 0.1;
+            for(let i = -1; i <= 1; i++) {
+                ctx.beginPath();
+                // Move to the LEFT side of center
+                ctx.moveTo(-cellSize * 0.4, i * cellSize * 0.2);
+                ctx.lineTo(cellSize * 0.4, i * cellSize * 0.2); 
+                ctx.stroke();
+            }
+
+
             ctx.restore();
         }
     });

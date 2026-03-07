@@ -13,7 +13,7 @@
 
         #canvas {
             background-color: #000;
-            border: 3px solid #104010;
+            border: 2px solid #114411;
             border-radius: 5px;
 
             position: fixed;
@@ -22,7 +22,7 @@
             transform: translate(-50%);
 
             height: 80vh;
-            aspect-ratio: 2/1;
+            width: auto;
         }
 
         #toolbar {
@@ -33,12 +33,12 @@
             transform: translateX(-50%);
             background: #222;
             padding: 10px;
-            border-radius: 8px;
+            border-radius: 5px;
             display: flex;
             flex-flow: row wrap;
             justify-content: flex-start;
             gap: 10px;
-            border: 2px solid #104010;
+            border: 2px solid #114411;
             color: white;
             font-family: sans-serif;
             align-items: center;
@@ -48,7 +48,7 @@
             background: #444;
             color: white;
             border: none;
-            padding: 8px 15px;
+            padding: 5px 15px;
             cursor: pointer;
             border-radius: 4px;
         }
@@ -61,7 +61,7 @@
         .action-btn {
             background: #333;
             color: #eee;
-            border: 1px solid #555;
+            border: 2px solid #114411;
             padding: 6px 12px;
             cursor: pointer;
             border-radius: 4px;
@@ -113,6 +113,7 @@
         <button class="tool" data-type="random" title="Turns on or off randomly when activated.">Random</button>
         <button class="tool" data-type="trigger" title="Activates for one tick when the input turns on. Eequivalent to a rising edge detector.">Trigger</button>
         <button class="tool" data-type="noteBlock" title="Plays a set note when activated">Note Block</button>
+        <button class="tool" data-type="comment" title="Holds text that you can change with a click">Comment</button>
         <div class="info">Rotation: <span id="rot-display">Right</span></div>
 
         <button id="pause-btn" class="action-btn" onclick="togglePause()">Pause</button>
@@ -124,9 +125,9 @@
             <button class="action-btn" onclick="resizeGrid(gridWidth - 2, gridHeight - 1)">-</button>
         </div>        
 
-        <button onclick="exportToJSON()">Export JSON</button>
+        <button class="action-btn" onclick="exportToJSON()">Export JSON</button>
         <input type="file" id="importFile" style="display:none" onchange="importFromJSON(event)">
-        <button onclick="document.getElementById('importFile').click()">Import JSON</button>
+        <button class="action-btn" onclick="document.getElementById('importFile').click()">Import JSON</button>
     </div>
     <canvas id="canvas"></canvas>
     <script src="index.js"></script>
