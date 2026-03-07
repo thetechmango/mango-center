@@ -51,6 +51,7 @@ function exportToJSON() {
             y: block.y,
             rotation: block.rotation,
             color: block.color || null,
+            lastInput: this.lastInput,
             power: block.power,
             state: block.state ?? 0,
             channel: block.channel,
