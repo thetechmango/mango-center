@@ -59,7 +59,8 @@ function exportToJSON() {
             targetKey: block.targetKey,
             noteIndex: block.noteIndex,
             text: block.text,
-            isCCW: block.isCCW
+            isCCW: block.isCCW,
+            reverse: block.reverse
         };
     });
 
@@ -91,7 +92,7 @@ function importFromJSON(event) {
             Wire, Inverter, Diode, Bridge, Switch, Button, 
             PowerBlock, Lamp, Toggle, HoverSensor, Delay, 
             KeyBlock, Transmitter, Receiver, Random, Trigger,
-            NoteBlock, Comment, Rotator
+            NoteBlock, Comment, Rotator, Actuator, Repulsor
         };
 
         parsed.data.forEach((b) => {
@@ -101,6 +102,7 @@ function importFromJSON(event) {
             if (BlockClass) {
                 const newBlock = new BlockClass(b.x, b.y, b.rotation);
                 newBlock.power = b.power || 0;
+                newBlock.lastInput = b.lastInput || 0;
                 
                 if (b.color) newBlock.color = b.color;
                 if (b.state !== undefined) newBlock.state = b.state;
@@ -110,7 +112,8 @@ function importFromJSON(event) {
                     newBlock.delayAmount = b.delayAmount;
                     newBlock.history = new Array(b.delayAmount).fill(0);
                 }
-
+                if (b.noteIndex !== undefined) newBlock.noteIndex = b.noteIndex;
+                
                 // Place in the correct slot based on the new gridWidth
                 const id = b.y * gridWidth + b.x;
                 grid[id] = newBlock;
@@ -125,9 +128,9 @@ function importFromJSON(event) {
 }
 
 function getNoteInfo(index) {
-    const octave = Math.floor(index / 12) + 4;
+    const octave = Math.floor(index / 12) + 3;
     const name = NOTE_NAMES[index % 12];
-    const freq = 261.63 * Math.pow(2, index / 12); // Base C4 is 261.63Hz
+    const freq = 261.63 * Math.pow(2, (index - 12) / 12); // Base C3
     return { name: `${name}${octave}`, freq };
 }
 
@@ -1341,7 +1344,7 @@ class NoteBlock extends Block {
 
     interact(e) {
         const step = (e && e.shiftKey) ? -1 : 1;
-        this.noteIndex = (this.noteIndex + step + 37) % 37; // 3 Octaves (0-36)
+        this.noteIndex = (this.noteIndex + step + 49) % 49; // 4 octaves (0–48)
         
         // Brief preview: Play and then stop after 300ms
         this.startSound();
@@ -1549,6 +1552,167 @@ class Rotator extends Block {
     }
 }
 
+class Actuator extends Block {
+    constructor(x, y, rotation = 0) {
+        super(x, y, rotation);
+        this.reverse = false; // false = normal click, true = shift-click
+        this.lastInput = 0;
+    }
+
+    interact() {
+        // Toggle between increment and decrement mode
+        this.reverse = !this.reverse;
+        render();
+    }
+
+    update() {
+        const input = this.getBackNeighbor();
+        const inputPower = (input && input.power > 0) ? 1 : 0;
+
+        // Rising edge
+        if (inputPower === 1 && this.lastInput === 0) {
+            const target = this.getForwardNeighbor();
+            if (target && typeof target.interact === "function") {
+                target.interact({ shiftKey: this.reverse });
+                target.dirtyNeighbors();
+            }
+        }
+
+        this.lastInput = inputPower;
+        this.power = inputPower;
+
+        if (this.power !== this.lastPower) this.dirtyNeighbors();
+    }
+
+    draw() {
+        ctx.save();
+        ctx.rotate((this.rotation - 1) * Math.PI / 2);
+
+        ctx.fillStyle = "#333";
+        ctx.beginPath();
+        ctx.roundRect(-cellSize/2, -cellSize/2, cellSize, cellSize, cellSize * 0.15);
+        ctx.fill();
+
+        ctx.strokeStyle = this.reverse ? "#4d4dff" : "#4dff4d";
+        ctx.lineWidth = cellSize * 0.1;
+        ctx.lineCap = "round";
+        
+        const startAngle = -Math.PI / 2 + Math.PI / 4;
+        const endAngle = Math.PI / 2 - Math.PI / 4;
+    
+        ctx.beginPath();
+        ctx.arc(0, 0, cellSize * 0.25, startAngle, endAngle);
+        ctx.stroke();
+
+        // Input indicator
+        const inputColor = this.lastInput ? "#ff4d4d" : "#441111"; 
+        ctx.fillStyle = inputColor;
+        ctx.beginPath();
+        ctx.moveTo(-cellSize*0.5 + cellSize*0.2, 0);
+        ctx.lineTo(-cellSize*0.5, -cellSize*0.15);
+        ctx.lineTo(-cellSize*0.5, cellSize*0.15);
+        ctx.fill();
+
+        ctx.restore();
+    }
+}
+
+class Repulsor extends Block {
+    constructor(x, y, rotation = 0) {
+        super(x, y, rotation);
+        this.lastInput = 0;
+    }
+
+    update() {
+        const input = this.getBackNeighbor();
+        const inputPower = (input && input.power > 0) ? 1 : 0;
+
+        // Rising edge → push
+        if (inputPower === 1 && this.lastInput === 0) {
+            this.pushChain();
+        }
+
+        this.lastInput = inputPower;
+        this.power = inputPower;
+
+        if (this.power !== this.lastPower) this.dirtyNeighbors();
+    }
+
+    pushChain() {
+        // Direction vector
+        const dx = (this.rotation === 1 ? 1 : this.rotation === 3 ? -1 : 0);
+        const dy = (this.rotation === 2 ? 1 : this.rotation === 0 ? -1 : 0);
+
+        // Start at the block in front
+        let cx = this.x + dx;
+        let cy = this.y + dy;
+
+        // Find the first empty space or stop at edge
+        let chain = [];
+
+        while (cx >= 0 && cx < gridWidth && cy >= 0 && cy < gridHeight) {
+            const idx = cy * gridWidth + cx;
+            const block = grid[idx];
+
+            if (!block) break; // Found empty tile → stop
+
+            chain.push({ block, x: cx, y: cy });
+
+            cx += dx;
+            cy += dy;
+        }
+
+        // If we hit the edge with no empty space, abort
+        if (cx < 0 || cx >= gridWidth || cy < 0 || cy >= gridHeight) return;
+
+        // Now cx, cy is the empty tile → shift chain forward
+        for (let i = chain.length - 1; i >= 0; i--) {
+            const { block, x, y } = chain[i];
+
+            const newX = x + dx;
+            const newY = y + dy;
+
+            grid[newY * gridWidth + newX] = block;
+            block.x = newX;
+            block.y = newY;
+
+            grid[y * gridWidth + x] = null;
+
+            dirtyBlocks.add(newY * gridWidth + newX);
+            block.dirtyNeighbors();
+        }
+    }
+
+    draw(ctx, size) {
+        ctx.save();
+        ctx.rotate((this.rotation - 1) * Math.PI / 2);
+
+        // Base
+        ctx.fillStyle = "#333";
+        ctx.beginPath();
+        ctx.roundRect(-size/2, -size/2, size, size, size * 0.15);
+        ctx.fill();
+
+        // Arrow (bright when powered)
+        ctx.fillStyle = this.power ? "#ff4d4d" : "#441111";
+        ctx.beginPath();
+        ctx.moveTo(size * 0.2, 0);
+        ctx.lineTo(-size * 0.1, -size * 0.22);
+        ctx.lineTo(-size * 0.1, size * 0.22);
+        ctx.fill();
+
+        // Input indicator
+        const inputColor = this.lastInput ? "#ff4d4d" : "#441111";
+        ctx.fillStyle = inputColor;
+        ctx.beginPath();
+        ctx.moveTo(-size*0.5 + size*0.2, 0);
+        ctx.lineTo(-size*0.5, -size*0.15);
+        ctx.lineTo(-size*0.5, size*0.15);
+        ctx.fill();
+
+        ctx.restore();
+    }
+}
 
 // Tool Selection
 document.querySelectorAll('.tool').forEach(btn => {
@@ -1625,13 +1789,13 @@ canvas.addEventListener("mousedown", (e) => {
         selection = { x1: gx, y1: gy, x2: gx, y2: gy };
         render();
     }
-    else if (e.button === 0) { // Left Click
+    else if (e.button === 0) {
         if (clipboard && isPasting) {
-            // Logic for PASTE (Stamping the clipboard)
+            // paste
             pasteAt(gx, gy);
             isPasting = false;
         } else if (selection) {
-            // Logic to CLEAR SELECTION if clicking elsewhere
+            // clear selection
             selection = null;
             showFloatingUI();
         }
@@ -1798,6 +1962,8 @@ function handleInteraction(e) {
             else if (currentTool === "trigger") newBlock = new Trigger(x, y, currentRotation);
             else if (currentTool === "noteBlock") newBlock = new NoteBlock(x, y, currentRotation);
             else if (currentTool === "rotator") newBlock = new Rotator(x, y, currentRotation);
+            else if (currentTool === "actuator") newBlock = new Actuator(x, y, currentRotation);
+            else if (currentTool === "repulsor") newBlock = new Repulsor(x, y, currentRotation);
             else if (currentTool === "comment") newBlock = new Comment(x, y);
 
             if (newBlock) {
@@ -1987,7 +2153,8 @@ function render() {
             hoverSensor: HoverSensor, delay: Delay, keyBlock: KeyBlock, 
             transmitter: Transmitter, receiver: Receiver, random: Random, 
             trigger: Trigger, powerBlock: PowerBlock, comment: Comment,
-            rotator: Rotator, noteBlock: NoteBlock
+            rotator: Rotator, noteBlock: NoteBlock, actuator: Actuator,
+            repulsor: Repulsor
         };
 
         const PreviewClass = constructors[currentTool];
@@ -2051,7 +2218,7 @@ function step() {
 let lastTickTime = 0;
 
 function frame(timestamp) {
-    if (!isPaused && timestamp - lastTickTime >= 1000/tickRate) {
+    while (!isPaused && timestamp - lastTickTime >= 1000/tickRate) {
         tick();
         lastTickTime = timestamp;
     }
