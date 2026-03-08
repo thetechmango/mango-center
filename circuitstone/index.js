@@ -117,10 +117,7 @@ canvas.addEventListener("mousemove", (e) => {
     // Sensor logic
     grid.forEach((block, id) => {
         if (block instanceof HoverSensor) {
-            const shouldBeOn = (id === currentId);
-            if (block.power !== (shouldBeOn ? 1 : 0)) {
-                block.power = shouldBeOn ? 1 : 0;
-            }
+            block.power = (id === currentId) ? 1 : 0;
         }
     });
 
@@ -229,23 +226,26 @@ function handleInteraction(e) {
 canvas.addEventListener("contextmenu", e => e.preventDefault());
 
 function tick() {
-    // 1. Reset volatile states
     wirelessChannels = {};
+    for (let block of grid) {
+        if (block instanceof Transmitter && block.power === 1) {
+            wirelessChannels[block.channel] = 1;
+        }
+    }
 
-    // 1. Snapshot the state for Logic blocks (Gates, Delayers, etc.)
+    // snapshot
     const stateSnapshot = grid.map(b => b ? { power: b.power, rotation: b.rotation } : null);
 
-    // 2. Logic Phase: Only non-wire blocks update based on the snapshot
+    // logic
     for (let block of grid) {
         if (!block || block.isWire) continue; // Skip wires for now
         block.readSnapshot = stateSnapshot;
         block.update(); 
     }
 
-    // 3. Wire Propagation Phase: Wires update LIVE to allow instant travel
-    // We run this multiple times per tick so power can travel across the whole grid
+    // wires
     let changed = true;
-    let limit = 100; // Prevent infinite loops if you have a feedback bug
+    let limit = 100;
     while (changed && limit-- > 0) {
         changed = false;
         for (let block of grid) {
@@ -257,16 +257,16 @@ function tick() {
         }
     }
 
-    // 4. Commit Phase (Logic Cleanup)
+    // commit
     for (let block of grid) {
         if (!block) continue;
         block.lastPower = block.power;
         block.lastPowerH = block.powerH;
         block.lastPowerV = block.powerV;
-        block.lastInput = block.input; // Corrected: Live input becomes lastInput
+        block.lastInput = block.input;
     }
 
-    // 5. World Modification Phase (DIRECT LIVE MODIFICATION)
+    // world modification
     for (let i = 0; i < grid.length; i++) {
         const block = grid[i];
         if (!block) continue;

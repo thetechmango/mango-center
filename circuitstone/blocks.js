@@ -28,12 +28,9 @@ class Block {
     getLeftNeighbor() { return this.getNeighbor((this.rotation + 3) % 4); }
     getRightNeighbor() { return this.getNeighbor((this.rotation + 1) % 4); }
 
-    // Placeholder: subclasses will override this
     update(neighbors) {}
 
-    interact() {
-        // Default: do nothing
-    }
+    interact() {}
 
     getNeighborId(dir) {
         const nx = this.x + (dir === 1 ? 1 : dir === 3 ? -1 : 0);
@@ -57,12 +54,10 @@ class Block {
         const id = this.getNeighborId(dir);
         if (id === null) return 0;
 
-        // WIRES: Read live grid for instant propagation
         if (this.isWire) {
             return grid[id] ? grid[id].power : 0;
         }
 
-        // LOGIC BLOCKS: Read snapshot for stable timing
         return this.readSnapshot[id] ? this.readSnapshot[id].power : 0;
     }
 
@@ -151,7 +146,7 @@ class Wire extends Block {
                         foundPower = true;
                         break;
                     }
-                    else if ((neighbor instanceof Switch || neighbor instanceof Button) && neighbor.power > 0) {
+                    else if ((neighbor instanceof Switch || neighbor instanceof Button || neighbor instanceof HoverSensor) && neighbor.power > 0) {
                         foundPower = true;
                         break;
                     } 
@@ -218,7 +213,7 @@ class Wire extends Block {
                 this.color === neighbor.n.color
             );
             
-            const isComponent = !isWire && (this.color !== "black"); 
+            const isComponent = !isWire && (this.color !== "black");
             if (connects || isComponent) {
                 ctx.beginPath();
                 ctx.moveTo(centerX, centerY);
@@ -610,10 +605,6 @@ class HoverSensor extends Block {
         this.power = 0;
     }
 
-    prepareNextTick() {
-        this.lastPower = this.power;
-    }
-
     update() {}
 
     interact() {}
@@ -788,32 +779,14 @@ class Transmitter extends Block {
         super(x, y, rotation);
         this.channel = 0;
     }
-
-    interact(e) {
-        const step = (e && e.shiftKey) ? -1 : 1;
-        this.channel = (this.channel + step + 100) % 100; // Cycle channels 0-99
-        render();
-    }
-
     update() {
-        let locallyPowered = false;
-    
-        // Check all 4 neighbors for input
-        for (let i = 0; i < 4; i++) {
-            if (this.getNeighborPower(i) > 0) {
-                locallyPowered = true;
+        this.power = 0;
+        for (let dir = 0; dir < 4; dir++) {
+            if (this.getNeighborPower(dir) === 1) {
+                this.power = 1;
                 break;
             }
         }
-    
-        // For renderer only
-        this.isTransmitting = locallyPowered;
-    
-        if (locallyPowered) {
-            wirelessChannels[this.channel] = 1;
-        }
-        
-        this.power = 0; 
     }
 
     draw() {
@@ -823,10 +796,8 @@ class Transmitter extends Block {
         ctx.beginPath();
         ctx.roundRect(-cellSize/2, -cellSize/2, cellSize, cellSize, cellSize * 0.15);
         ctx.fill();
-    
-        // ONLY glow if THIS specific block is powered
-        const active = this.isTransmitting;
-        ctx.strokeStyle = active ? "#ff4d4d" : "#441111";
+
+        ctx.strokeStyle = this.power ? "#ff4d4d" : "#441111";
         ctx.lineWidth = cellSize * 0.05;
     
         for(let i = 1; i <= 3; i++) {
@@ -858,7 +829,6 @@ class Receiver extends Block {
     }
 
     update() {
-        // Read from the global bus
         this.power = wirelessChannels[this.channel] || 0;
     }
 
@@ -937,21 +907,19 @@ class Random extends Block {
 class Trigger extends Block {
     constructor(x, y, rotation = 0) {
         super(x, y, rotation);
-        this.power = 0;
+        this.input = 0;
         this.lastInput = 0;
-        this.lastPower = 0;
-    }
-
-    prepareNextTick() {
-        this.lastPower = this.power;
     }
 
     update() {
-        const input = this.getBackNeighbor();
-        const inputPower = (input && input.power > 0) ? 1 : 0;
+        const backDir = (this.rotation + 2) % 4;
+        this.input = this.getNeighborPower(backDir) > 0 ? 1 : 0;
 
-        this.power = (inputPower === 1 && this.lastInput === 0) ? 1 : 0;
-        this.lastInput = inputPower;
+        if (this.input === 1 && this.lastInput === 0) {
+            this.power = 1;
+        } else {
+            this.power = 0;
+        }
     }
 
     draw() {
@@ -1009,16 +977,11 @@ class PowerBlock extends Block {
             white: this.power ? "#ffffff" : "#555555",
             black: this.power ? "#000000" : "#000000"
         };
-
-        ctx.save();
-        ctx.rotate((this.rotation - 1) * Math.PI / 2);
         
         ctx.fillStyle = colorMap[this.color] || "ff4d4d";
         ctx.beginPath();
         ctx.roundRect(-cellSize/2, -cellSize/2, cellSize, cellSize, cellSize * 0.15);
         ctx.fill();
-
-        ctx.restore();
     }
 }
 
