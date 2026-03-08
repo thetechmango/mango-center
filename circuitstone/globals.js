@@ -284,3 +284,27 @@ function step() {
     render();
     document.getElementById("pause-btn").innerText = "Resume";
 }
+
+function resizeGrid(newW, newH) {
+    // Prevent shrinking to 0
+    newW = Math.max(1, newW);
+    newH = Math.max(1, newH);
+
+    let newGrid = new Array(newW * newH).fill(null);
+    
+    grid.forEach((block) => {
+        if (block && block.x < newW && block.y < newH) {
+            const newId = block.y * newW + block.x;
+            newGrid[newId] = block;
+        }
+    });
+
+    gridWidth = newW;
+    gridHeight = newH;
+    grid = newGrid;
+    cellSize = canvas.width / gridWidth;
+    
+    grid.forEach((b, i) => { if (b) dirtyBlocks.add(i); });
+    
+    render();
+}
