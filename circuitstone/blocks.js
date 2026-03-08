@@ -71,7 +71,7 @@ class Block {
 
     render(x, y, isPreview = false) {
         ctx.save();
-        if (isPreview) ctx.globalAlpha = 0.4;
+        if (isPreview) ctx.globalAlpha = 0.5;
         
         ctx.translate(x + cellSize / 2, y + cellSize / 2);
 

@@ -7,7 +7,6 @@ document.querySelectorAll('.tool').forEach(btn => {
     });
 });
 
-// Hotkeys for Rotation
 window.addEventListener("keydown", (e) => {
     if (e.target.tagName === 'TEXTAREA' || e.target.tagName === 'INPUT') {
         return;
@@ -172,31 +171,12 @@ window.addEventListener("mouseup", () => {
 canvas.addEventListener("wheel", (e) => {
     e.preventDefault();
 
-    const tools = Array.from(document.querySelectorAll('.tool'));
-    const currentActive = document.querySelector('.tool.active');
-    let currentIndex = tools.indexOf(currentActive);
-
     if (e.deltaY > 0) {
-        currentIndex = Math.min(currentIndex + 1, tools.length - 1);
+        currentRotation = (currentRotation + 1) % 4;
     } else {
-        currentIndex = Math.max(currentIndex - 1, 0);
+        currentRotation = (currentRotation + 3) % 4;
     }
-
-    const newToolBtn = tools[currentIndex];
-    newToolBtn.click();
 }, { passive: false });
-
-colorPicker.addEventListener("change", () => {
-    // Automatically switch to wire tool when a color is picked (disabled)
-    /*
-    currentTool = "wire";
-    
-    document.querySelectorAll('.tool').forEach(btn => {
-        btn.classList.remove('active');
-        if (btn.dataset.type === "wire") btn.classList.add('active');
-    });
-    */
-});
 
 function handleInteraction(e) {
     const rect = canvas.getBoundingClientRect();
@@ -359,6 +339,10 @@ function render() {
             }
             if (ghost.hasOwnProperty('rotation')) {
                 ghost.rotation = currentRotation;
+            }
+            // Show powered lamp to see the color before placing
+            if (ghost.hasOwnProperty('power') && ghost instanceof Lamp) {
+                ghost.power = 1;
             }
             
             // Draw it at the mouse position with 'isPreview = true'
