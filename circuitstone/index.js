@@ -178,6 +178,36 @@ canvas.addEventListener("wheel", (e) => {
     }
 }, { passive: false });
 
+function createBlockFromTool(tool, x, y) {
+    const rot = currentRotation;
+    switch (tool) {
+        case "wire": return new Wire(x, y, 0, document.getElementById("wire-color").value);
+        case "inverter": return new Inverter(x, y, rot);
+        case "diode":    return new Diode(x, y, rot);
+        case "bridge":   return new Bridge(x, y, rot);
+        case "switch":   return new Switch(x, y);
+        case "button":   return new Button(x, y);
+        case "powerBlock": return new PowerBlock(x, y, rot);
+        case "delay":    return new Delay(x, y, rot);
+        case "hoverSensor": return new HoverSensor(x, y, rot);
+        case "lamp":     return new Lamp(x, y, rot);
+        case "toggle":   return new Toggle(x, y, rot);
+        case "keyBlock": return new KeyBlock(x, y, rot);
+        case "transmitter": return new Transmitter(x, y);
+        case "receiver": return new Receiver(x, y);
+        case "random":   return new Random(x, y, rot);
+        case "trigger":  return new Trigger(x, y, rot);
+        case "noteBlock": return new NoteBlock(x, y, rot);
+        case "rotator":  return new Rotator(x, y, rot);
+        case "actuator": return new Actuator(x, y, rot);
+        case "repulsor": return new Repulsor(x, y, rot);
+        case "detector": return new Detector(x, y, rot);
+        case "duplicator": return new Duplicator(x, y, rot);
+        case "comment":  return new Comment(x, y);
+        default: return null;
+    }
+}
+
 function handleInteraction(e) {
     const rect = canvas.getBoundingClientRect();
     const x = Math.floor((e.clientX - rect.left) / (rect.width / gridWidth));
@@ -191,50 +221,24 @@ function handleInteraction(e) {
         if (!grid[id]) return;
         const blockToDie = grid[id];
 
-        if (typeof grid[id].onDelete === 'function') {
-            grid[id].onDelete();
+        if (typeof blockToDie.onDelete === 'function') {
+            blockToDie.onDelete();
         }
 
         grid[id] = null;
         blockToDie.dirtyNeighbors();
     } 
-    else if (dragButton === 0) { // Left click: Interact or Place
+    else if (dragButton === 0) { // Left click
         if (grid[id] !== null) {
-            // Interact only once per click/tile-entry
             grid[id].interact(e);
         } else {
-            // Place new block
-            let newBlock = null;
-            if (currentTool === "wire") {
-                const color = document.getElementById("wire-color").value;
-                newBlock = new Wire(x, y, 0, color);
-            }            
-            else if (currentTool === "inverter") newBlock = new Inverter(x, y, currentRotation);
-            else if (currentTool === "diode") newBlock = new Diode(x, y, currentRotation);
-            else if (currentTool === "bridge") newBlock = new Bridge(x, y, currentRotation);
-            else if (currentTool === "switch") newBlock = new Switch(x, y);
-            else if (currentTool === "button") newBlock = new Button(x, y);
-            else if (currentTool === "powerBlock") newBlock = new PowerBlock(x, y, currentRotation);
-            else if (currentTool === "delay") newBlock = new Delay(x, y, currentRotation);
-            else if (currentTool === "hoverSensor") newBlock = new HoverSensor(x, y, currentRotation);
-            else if (currentTool === "lamp") newBlock = new Lamp(x, y, currentRotation);
-            else if (currentTool === "toggle") newBlock = new Toggle(x, y, currentRotation);
-            else if (currentTool === "keyBlock") newBlock = new KeyBlock(x, y, currentRotation);
-            else if (currentTool === "transmitter") newBlock = new Transmitter(x, y);
-            else if (currentTool === "receiver") newBlock = new Receiver(x, y);
-            else if (currentTool === "random") newBlock = new Random(x, y, currentRotation);
-            else if (currentTool === "trigger") newBlock = new Trigger(x, y, currentRotation);
-            else if (currentTool === "noteBlock") newBlock = new NoteBlock(x, y, currentRotation);
-            else if (currentTool === "rotator") newBlock = new Rotator(x, y, currentRotation);
-            else if (currentTool === "actuator") newBlock = new Actuator(x, y, currentRotation);
-            else if (currentTool === "repulsor") newBlock = new Repulsor(x, y, currentRotation);
-            else if (currentTool === "detector") newBlock = new Detector(x, y, currentRotation);
-            else if (currentTool === "duplicator") newBlock = new Duplicator(x, y, currentRotation);
-            else if (currentTool === "comment") newBlock = new Comment(x, y);
+            // Placement Logic
+            let newBlock = createBlockFromTool(currentTool, x, y);
 
             if (newBlock) {
                 grid[id] = newBlock;
-                newBlock.update(); 
+                // Important: Don't call update() manually here if it relies on snapshots.
+                // Instead, ensure the next tick processes it.
                 newBlock.dirtyNeighbors();
                 dirtyBlocks.add(id);
             }
@@ -245,61 +249,63 @@ function handleInteraction(e) {
 canvas.addEventListener("contextmenu", e => e.preventDefault());
 
 function tick() {
+    // 1. Reset volatile states
     wirelessChannels = {};
 
-    grid.forEach((block) => {
-        if (block instanceof Transmitter) {
-            block.update(); 
-        }
-    });
+    // 1. Snapshot the state for Logic blocks (Gates, Delayers, etc.)
+    const stateSnapshot = grid.map(b => b ? { power: b.power, rotation: b.rotation } : null);
 
-    grid.forEach((block, id) => {
-        if (block instanceof Receiver) {
-            dirtyBlocks.add(id);
-        }
-    });
+    // 2. Logic Phase: Only non-wire blocks update based on the snapshot
+    for (let block of grid) {
+        if (!block || block.isWire) continue; // Skip wires for now
+        block.readSnapshot = stateSnapshot;
+        block.update(); 
+    }
 
-    if (dirtyBlocks.size === 0) return;
-
-    let toProcess = new Set(dirtyBlocks);
-    dirtyBlocks.clear();
-
-    // Components
-    for (let id of toProcess) {
-        const block = grid[id];
-        if (block && !(block instanceof Wire)) {
-            block.prepareNextTick();
-            block.update();
-
-            let changed = false;
-            if (block instanceof Bridge) {
-                changed = (block.powerH !== block.lastPowerH || block.powerV !== block.lastPowerV);
-            } else {
-                changed = (block.power !== block.lastPower);
+    // 3. Wire Propagation Phase: Wires update LIVE to allow instant travel
+    // We run this multiple times per tick so power can travel across the whole grid
+    let changed = true;
+    let limit = 100; // Prevent infinite loops if you have a feedback bug
+    while (changed && limit-- > 0) {
+        changed = false;
+        for (let block of grid) {
+            if (block && block.isWire) {
+                const oldPower = block.power;
+                block.update(); // Wires read from live grid, not snapshot
+                if (block.power !== oldPower) changed = true;
             }
-
-            if (changed) {
-                block.dirtyNeighbors();
-            }
-        } else if (block instanceof Wire) {
-            // Pass wires to Phase 2
-            dirtyBlocks.add(id);
         }
     }
 
-    // Wires
-    let wireProcess = new Set(dirtyBlocks);
-    for (let id of wireProcess) {
-        const block = grid[id];
-        if (block instanceof Wire) {
-            block.prepareNextTick();
-            block.update();
-            if (block.power !== block.lastPower) {
-                block.dirtyNeighbors();
-            }
+    // 4. Commit Phase (Logic Cleanup)
+    for (let block of grid) {
+        if (!block) continue;
+        block.lastPower = block.power;
+        block.lastPowerH = block.powerH;
+        block.lastPowerV = block.powerV;
+        block.lastInput = block.input; // Corrected: Live input becomes lastInput
+    }
+
+    // 5. Physics/Movement Phase (Double Buffered Grid)
+    let nextGrid = new Array(gridWidth * gridHeight).fill(null);
+    for (let i = 0; i < grid.length; i++) {
+        const block = grid[i];
+        if (!block) continue;
+
+        // Movement logic writes to 'nextGrid' to prevent double-processing
+        if (block instanceof Rotator) block.applyRotation(nextGrid);
+        else if (block instanceof Actuator) block.applyActuation(nextGrid);
+        else if (block instanceof Duplicator) block.applyDuplication(nextGrid);
+        else if (block instanceof Repulsor) block.applyRepulsion(nextGrid);
+        else {
+            // Keep block in place if no movement occurred
+            if (!nextGrid[i]) nextGrid[i] = block;
         }
     }
+    
+    grid = nextGrid; // Finalize world state
 }
+
 
 function render() {
     ctx.fillStyle = "#111"; // Background

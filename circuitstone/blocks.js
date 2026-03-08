@@ -5,6 +5,7 @@ class Block {
         this.rotation = rotation; // 0: Up, 1: Right, 2: Down, 3: Left
         this.power = 0;
         this.lastPower = 0;
+        this.isWire = false;
     }
 
     getNeighbor(dir) {
@@ -44,25 +45,35 @@ class Block {
         }
     }
 
-    getNeighborPower(dir) {
-        const neighbor = this.getNeighbor(dir);
-        if (!neighbor) return 0;
+    getNeighborId(dir) {
+        const nx = this.x + (dir === 1 ? 1 : dir === 3 ? -1 : 0);
+        const ny = this.y + (dir === 2 ? 1 : dir === 0 ? -1 : 0);
     
-        if (neighbor.color === "black" && !(this instanceof Lamp)) {
-            return 0;
+        // Out of bounds
+        if (nx < 0 || ny < 0 || nx >= gridWidth || ny >= gridHeight) {
+            return null;
+        }
+    
+        return ny * gridWidth + nx;
+    }    
+
+    getNeighborState(dir) {
+        const id = this.getNeighborId(dir);
+        if (id === null || !this.readSnapshot) return null;
+        return this.readSnapshot[id];
+    }
+
+    getNeighborPower(dir) {
+        const id = this.getNeighborId(dir);
+        if (id === null) return 0;
+
+        // WIRES: Read live grid for instant propagation
+        if (this.isWire) {
+            return grid[id] ? grid[id].power : 0;
         }
 
-        if (neighbor instanceof Bridge) {
-            const isAtOutputA = neighbor.rotation === (dir + 2) % 4;
-            if (isAtOutputA) return neighbor.powerH;
-    
-            const isAtOutputB = ((neighbor.rotation + 1) % 4) === (dir + 2) % 4;
-            if (isAtOutputB) return neighbor.powerV;
-    
-            return 0;
-        }
-    
-        return neighbor.power;
+        // LOGIC BLOCKS: Read snapshot for stable timing
+        return this.readSnapshot[id] ? this.readSnapshot[id].power : 0;
     }
 
     prepareNextTick() {
@@ -85,6 +96,7 @@ class Wire extends Block {
     constructor(x, y, rotation = 0, color = "red") {
         super(x, y, rotation);
         this.color = color;
+        this.isWire = true;
     }
     update() {
         let visited = new Set();
@@ -153,16 +165,12 @@ class Wire extends Block {
                         foundPower = true;
                         break;
                     } 
-                    else if (neighbor instanceof Diode ||neighbor instanceof Inverter || neighbor instanceof Delay || neighbor instanceof Trigger) {
+                    else if (neighbor instanceof Diode ||neighbor instanceof Inverter || neighbor instanceof Delay) {
                         const pointsAtThis = neighbor.rotation === (dir + 2) % 4;
                         if (neighbor.power > 0 && pointsAtThis) {
                             foundPower = true;
                             break;
                         }
-                    }
-                    else if (neighbor instanceof HoverSensor && neighbor.power > 0) {
-                        foundPower = true;
-                        break;
                     }
                     else if (neighbor instanceof PowerBlock) {
                         // Standard color matching logic
@@ -1008,17 +1016,20 @@ class Random extends Block {
 class Trigger extends Block {
     constructor(x, y, rotation = 0) {
         super(x, y, rotation);
+        this.power = 0;
         this.lastInput = 0;
+        this.lastPower = 0;
+    }
+
+    prepareNextTick() {
+        this.lastPower = this.power;
     }
 
     update() {
         const input = this.getBackNeighbor();
         const inputPower = (input && input.power > 0) ? 1 : 0;
 
-        // The "Rising Edge" Logic:
-        // Output is 1 ONLY on the exact frame the input flips from 0 to 1
         this.power = (inputPower === 1 && this.lastInput === 0) ? 1 : 0;
-
         this.lastInput = inputPower;
 
         if (this.power !== this.lastPower) {

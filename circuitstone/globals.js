@@ -11,6 +11,8 @@ let grid = new Array(gridWidth * gridHeight).fill(null);
 let cellSize = canvas.width / gridWidth;
 let dirtyBlocks = new Set();
 
+let snapshot = new Array(grid.length);
+
 let tickRate = 20; // 20 tps
 
 let currentTool = "wire";
