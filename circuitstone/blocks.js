@@ -35,16 +35,6 @@ class Block {
         // Default: do nothing
     }
 
-    dirtyNeighbors() {
-        const offsets = [[0, 0], [0, -1], [1, 0], [0, 1], [-1, 0]];
-        for (let [dx, dy] of offsets) {
-            const nx = this.x + dx, ny = this.y + dy;
-            if (nx >= 0 && nx < gridWidth && ny >= 0 && ny < gridHeight) {
-                dirtyBlocks.add(ny * gridWidth + nx);
-            }
-        }
-    }
-
     getNeighborId(dir) {
         const nx = this.x + (dir === 1 ? 1 : dir === 3 ? -1 : 0);
         const ny = this.y + (dir === 2 ? 1 : dir === 0 ? -1 : 0);
@@ -330,7 +320,6 @@ class Diode extends Block {
 }
 
 class Switch extends Block {
-    // only changes with a click
     update() {} 
 
     interact() {
@@ -338,8 +327,6 @@ class Switch extends Block {
     }
     toggle() {
         this.power = this.power === 1 ? 0 : 1;
-        dirtyBlocks.add(this.y * gridWidth + this.x);
-        this.dirtyNeighbors();
     }
 
     draw() {
@@ -373,18 +360,14 @@ class Switch extends Block {
 }
 
 class Button extends Block {
-    update() {} // only changes via mouse
+    update() {}
 
     press() {
         this.power = 1;
-        this.dirtyNeighbors();
-        dirtyBlocks.add(this.y * gridWidth + this.x);
     }
 
     release() {
         this.power = 0;
-        this.dirtyNeighbors();
-        dirtyBlocks.add(this.y * gridWidth + this.x);
     }
 
     draw() {
@@ -445,10 +428,6 @@ class Bridge extends Block {
             this.powerV = inputB.powerV;
         } else {
             this.powerV = (inputB && inputB.power > 0) ? 1 : 0;
-        }
-    
-        if (this.powerH !== oldH || this.powerV !== oldV) {
-            this.dirtyNeighbors();
         }
     }
 
@@ -534,10 +513,6 @@ class Lamp extends Block {
 
     update() {
         this.power = this.getNeighborPower((this.rotation + 2) % 4) > 0 ? 1 : 0;
-
-        if (this.power !== this.lastPower) {
-            this.dirtyNeighbors();
-        }
     }
 
     draw() {
@@ -573,30 +548,19 @@ class Toggle extends Block {
     constructor(x, y, rotation = 0) {
         super(x, y, rotation);
         this.state = 0;
-        this.lastInput = 0;
-    }
-
-    prepareNextTick() {
-        this.lastPower = this.power;
+        this.input = 0;     // Current tick input
+        this.lastInput = 0; // Previous tick input
     }
 
     update() {
-        const input = this.getBackNeighbor();
-        const inputPower = (input && input.power > 0) ? 1 : 0;
+        const backDir = (this.rotation + 2) % 4;
+        this.input = this.getNeighborPower(backDir) > 0 ? 1 : 0;
 
-        // Rising edge: 0 → 1
-        if (this.lastInput === 0 && inputPower === 1) {
-            this.state = this.state ? 0 : 1; // flip
+        if (this.lastInput === 0 && this.input === 1) {
+            this.state = this.state ? 0 : 1;
         }
 
-        this.lastInput = inputPower;
-
-        // Output = stored state
-        this.power = this.state;
-
-        if (this.power !== this.lastPower) {
-            this.dirtyNeighbors();
-        }
+        this.power = this.state ? 100 : 0;
     }
 
     draw() {
@@ -650,12 +614,7 @@ class HoverSensor extends Block {
         this.lastPower = this.power;
     }
 
-    update() {
-        if (this.power !== this.lastPower) {
-            this.dirtyNeighbors();
-            dirtyBlocks.add(this.y * gridWidth + this.x);
-        }
-    }
+    update() {}
 
     interact() {}
 
@@ -704,33 +663,15 @@ class Delay extends Block {
         
         // Resize history and fill with 0s
         this.history = new Array(this.delayAmount).fill(0);
-        this.dirtyNeighbors();
     }
 
     update() {
         const input = this.getBackNeighbor();
         const inputPower = (input && input.power > 0) ? 1 : 0;
     
-        // 1. Peek at what the output WILL be
-        const nextOutput = this.history[this.history.length - 1];
-    
-        // 2. Logic: Should we stay "awake"?
-        // - Stay awake if the internal history isn't uniform yet
-        // - OR if the input is currently high (filling the buffer)
-        // - OR if the output is about to change state (the final exit)
-        const isMoving = this.history.some(state => state !== inputPower);
-        const willChange = nextOutput !== this.power;
-    
-        // 3. Perform the shift
+        // Perform the shift
         this.history.unshift(inputPower);
         this.power = this.history.pop();
-    
-        // 4. Dirtying logic
-        // We check willChange OR isMoving OR if we just changed (powerChanged)
-        if (isMoving || willChange || this.power !== this.lastPower) {
-            dirtyBlocks.add(this.y * gridWidth + this.x);
-            this.dirtyNeighbors();
-        }
     }
 
     draw() {
@@ -818,13 +759,6 @@ class KeyBlock extends Block {
         // Check if its specific key is currently held down in your global keys set
         const isPressed = keysDown.has(this.targetKey) || keysDown.has(this.targetKey.toLowerCase());
         this.power = isPressed ? 1 : 0;
-
-        if (this.power !== this.lastPower) {
-            this.dirtyNeighbors();
-        }
-        
-        // Keep it "awake" while binding so the UI updates
-        if (this.isBinding) dirtyBlocks.add(this.y * gridWidth + this.x);
     }
 
     draw() {
@@ -926,10 +860,6 @@ class Receiver extends Block {
     update() {
         // Read from the global bus
         this.power = wirelessChannels[this.channel] || 0;
-
-        if (this.power !== this.lastPower) {
-            this.dirtyNeighbors();
-        }
     }
 
     draw() {
@@ -971,15 +901,6 @@ class Random extends Block {
         if (this.lastInput === 0 && inputPower === 1) {
             this.power = Math.random() > 0.5 ? 1 : 0;
         }
-
-        this.lastInput = inputPower;
-
-        if (this.power !== this.lastPower) {
-            this.dirtyNeighbors();
-        }
-        
-        // If input is high, keep it awake to detect the next pulse
-        if (inputPower === 1) dirtyBlocks.add(this.y * gridWidth + this.x);
     }
 
     draw() {
@@ -1031,16 +952,6 @@ class Trigger extends Block {
 
         this.power = (inputPower === 1 && this.lastInput === 0) ? 1 : 0;
         this.lastInput = inputPower;
-
-        if (this.power !== this.lastPower) {
-            this.dirtyNeighbors();
-        }
-        
-        // Always stay awake for one extra tick if the input is high 
-        // to reset the edge detection state
-        if (inputPower === 1 || this.power === 1) {
-            dirtyBlocks.add(this.y * gridWidth + this.x);
-        }
     }
 
     draw() {
@@ -1172,24 +1083,18 @@ class NoteBlock extends Block {
     }    
 
     update() {
-        const input = this.getBackNeighbor();
-        const inputPower = (input && input.power > 0) ? 1 : 0;
-
-        // Start on Rising Edge
-        if (inputPower === 1 && this.lastInput === 0) {
+        const backDir = (this.rotation + 2) % 4;
+        const currentInput = this.getNeighborPower(backDir) > 0 ? 1 : 0;
+    
+        if (currentInput === 1 && this.lastInput === 0) {
             this.startSound();
         } 
-        // Stop on Falling Edge
-        else if (inputPower === 0 && this.lastInput === 1) {
+        else if (currentInput === 0 && this.lastInput === 1) {
             this.stopSound();
         }
-
-        this.lastInput = inputPower;
-        this.power = inputPower;
-
-        if (this.power !== this.lastPower) this.dirtyNeighbors();
-        // Keep it "awake" while powered to ensure it can detect the shut-off
-        if (inputPower === 1) dirtyBlocks.add(this.y * gridWidth + this.x);
+    
+        this.power = currentInput ? 100 : 0;
+        this.input = currentInput;
     }
 
     draw() {
@@ -1243,12 +1148,6 @@ class Comment extends Block {
     update() {
         const hasText = this.text && this.text.trim().length > 0;
         this.power = hasText ? 1 : 0;
-
-        if (this.power !== this.lastPower) {
-            this.dirtyNeighbors();
-            
-            this.lastPower = this.power;
-        }
     }
 
     draw() {
@@ -1273,48 +1172,44 @@ class Comment extends Block {
 class Rotator extends Block {
     constructor(x, y, rotation = 0) {
         super(x, y, rotation);
-        this.isCCW = false; // Default Clockwise
+        this.isCCW = false; 
+        this.input = 0;
         this.lastInput = 0;
+        this.triggered = false; // Flag for Phase 5
     }
 
     interact() {
         this.isCCW = !this.isCCW;
-        render();
     }
 
+    // Phase 3: Logic Update
     update() {
-        const input = this.getBackNeighbor();
-        const inputPower = (input && input.power > 0) ? 1 : 0;
+        const backDir = (this.rotation + 2) % 4;
+        this.input = this.getNeighborPower(backDir) > 0 ? 1 : 0;
 
-        // Trigger on Rising Edge
-        if (inputPower === 1 && this.lastInput === 0) {
-            this.rotateTarget();
+        // Detect Rising Edge
+        if (this.input === 1 && this.lastInput === 0) {
+            this.triggered = true;
         }
 
-        this.lastInput = inputPower;
-        this.power = inputPower; // Pass-through power
-
-        if (this.power !== this.lastPower) this.dirtyNeighbors();
-        if (inputPower === 1) dirtyBlocks.add(this.y * gridWidth + this.x);
+        this.power = this.input ? 100 : 0;
     }
 
-    rotateTarget() {
-        // Find the block directly in front of the Rotator
-        const nx = this.x + (this.rotation === 1 ? 1 : this.rotation === 3 ? -1 : 0);
-        const ny = this.y + (this.rotation === 2 ? 1 : this.rotation === 0 ? -1 : 0);
-
-        if (nx < 0 || nx >= gridWidth || ny < 0 || ny >= gridHeight) return;
-
-        const target = grid[ny * gridWidth + nx];
-        if (target && typeof target.rotation !== 'undefined') {
-            const step = this.isCCW ? -1 : 1;
-            // Standard 0-3 rotation wrap
-            target.rotation = (target.rotation + step + 4) % 4;
+    applyRotation() {
+        if (this.triggered) {
+            // Find the block directly in front of the Rotator in the LIVE grid
+            const target = this.getForwardNeighbor();
             
-            // Wake up the target and its new neighbors
-            dirtyBlocks.add(ny * gridWidth + nx);
-            target.dirtyNeighbors();
+            if (target && typeof target.rotation !== 'undefined') {
+                const step = this.isCCW ? -1 : 1;
+                // Rotate the live block
+                target.rotation = (target.rotation + step + 4) % 4;
+            }
+            this.triggered = false; // Reset
         }
+        
+        // Update lastInput for the next tick's edge detection
+        this.lastInput = this.input;
     }
 
     draw() {
@@ -1370,33 +1265,37 @@ class Rotator extends Block {
 class Actuator extends Block {
     constructor(x, y, rotation = 0) {
         super(x, y, rotation);
-        this.reverse = false; // false = normal click, true = shift-click
+        this.reverse = false;
+        this.input = 0;
         this.lastInput = 0;
+        this.triggered = false;
     }
 
     interact() {
-        // Toggle between increment and decrement mode
         this.reverse = !this.reverse;
-        render();
     }
 
     update() {
-        const input = this.getBackNeighbor();
-        const inputPower = (input && input.power > 0) ? 1 : 0;
+        const backDir = (this.rotation + 2) % 4;
+        this.input = this.getNeighborPower(backDir) > 0 ? 1 : 0;
 
-        // Rising edge
-        if (inputPower === 1 && this.lastInput === 0) {
+        if (this.input === 1 && this.lastInput === 0) {
+            this.triggered = true;
+        }
+
+        this.power = this.input ? 100 : 0;
+    }
+
+    applyActuation() {
+        if (this.triggered) {
             const target = this.getForwardNeighbor();
             if (target && typeof target.interact === "function") {
                 target.interact({ shiftKey: this.reverse });
-                target.dirtyNeighbors();
             }
+            this.triggered = false; // Reset
         }
-
-        this.lastInput = inputPower;
-        this.power = inputPower;
-
-        if (this.power !== this.lastPower) this.dirtyNeighbors();
+        
+        this.lastInput = this.input;
     }
 
     draw() {
@@ -1435,84 +1334,60 @@ class Actuator extends Block {
 class Repulsor extends Block {
     constructor(x, y, rotation = 0) {
         super(x, y, rotation);
+        this.input = 0;
         this.lastInput = 0;
     }
 
     update() {
-        const input = this.getBackNeighbor();
-        const inputPower = (input && input.power > 0) ? 1 : 0;
-
-        // Rising edge → push
-        if (inputPower === 1 && this.lastInput === 0) {
-            this.pushChain();
-        }
-
-        this.lastInput = inputPower;
-        this.power = inputPower;
-
-        if (this.power !== this.lastPower) this.dirtyNeighbors();
+        const backDir = (this.rotation + 2) % 4;
+        this.input = this.getNeighborPower(backDir) > 0 ? 1 : 0;
+        this.power = this.input ? 100 : 0;
     }
 
-    pushChain() {
-        // Direction vector
+    applyRepulsion() {
+        const backDir = (this.rotation + 2) % 4;
+        
+        const neighbor = this.getNeighbor(backDir);
+        const liveInput = (neighbor && neighbor.power > 0) ? 1 : 0;
+
+        if (liveInput === 1 && this.lastInput === 0) {
+            this.executePush();
+        }
+
+        this.lastInput = liveInput;
+    }
+
+    executePush() {
         const dx = (this.rotation === 1 ? 1 : this.rotation === 3 ? -1 : 0);
         const dy = (this.rotation === 2 ? 1 : this.rotation === 0 ? -1 : 0);
 
-        // Start at the block in front
+        let chain = [];
         let cx = this.x + dx;
         let cy = this.y + dy;
-
-        // Find the first empty space or stop at edge
-        let chain = [];
 
         while (cx >= 0 && cx < gridWidth && cy >= 0 && cy < gridHeight) {
             const idx = cy * gridWidth + cx;
             const block = grid[idx];
-
-            if (!block) break; // Found empty tile → stop
-
+            if (!block) break; // Found empty space
             chain.push({ block, x: cx, y: cy });
-
             cx += dx;
             cy += dy;
         }
 
-        // If we hit the edge with no empty space, abort
-        if (cx < 0 || cx >= gridWidth || cy < 0 || cy >= gridHeight) return;
+        // If the space at the end of the chain is out of bounds or occupied, abort
+        if (cx < 0 || cx >= gridWidth || cy < 0 || cy >= gridHeight || grid[cy * gridWidth + cx]) return;
 
-        // Now cx, cy is the empty tile → shift chain forward
         for (let i = chain.length - 1; i >= 0; i--) {
             const { block, x, y } = chain[i];
-        
             const newX = x + dx;
             const newY = y + dy;
-        
-            // Move block
-            grid[newY * gridWidth + newX] = block;
+
+            grid[y * gridWidth + x] = null; // Clear old spot
+            grid[newY * gridWidth + newX] = block; // Occupy new spot
+            
             block.x = newX;
             block.y = newY;
-        
-            grid[y * gridWidth + x] = null;
-        
-            // Dirty new position
-            dirtyBlocks.add(newY * gridWidth + newX);
-            block.dirtyNeighbors();
-        
-            // Dirty old position
-            dirtyBlocks.add(y * gridWidth + x);
-        
-            // Dirty neighbors of old position
-            const offsets = [
-                [0, -1], [1, 0], [0, 1], [-1, 0]
-            ];
-        
-            for (let [ox, oy] of offsets) {
-                const nx = x + ox, ny = y + oy;
-                if (nx >= 0 && nx < gridWidth && ny >= 0 && ny < gridHeight) {
-                    dirtyBlocks.add(ny * gridWidth + nx);
-                }
-            }
-        }        
+        }
     }
 
     draw() {
@@ -1556,10 +1431,6 @@ class Detector extends Block {
         const hasBlock = target ? 1 : 0;
 
         this.power = hasBlock;
-
-        if (this.power !== this.lastPower) {
-            this.dirtyNeighbors();
-        }
     }
 
     draw() {
@@ -1586,65 +1457,63 @@ class Detector extends Block {
 class Duplicator extends Block {
     constructor(x, y, rotation = 0) {
         super(x, y, rotation);
+        this.input = 0;
         this.lastInput = 0;
+        this.triggered = false;
     }
 
     update() {
-        // Power comes from LEFT and RIGHT relative to rotation
-        const left = this.getLeftNeighbor();
-        const right = this.getRightNeighbor();
+        // Read from Snapshot for consistent timing
+        const leftPower = this.getNeighborPower((this.rotation + 3) % 4);
+        const rightPower = this.getNeighborPower((this.rotation + 1) % 4);
+        
+        this.input = (leftPower > 0 || rightPower > 0) ? 1 : 0;
 
-        const inputPower =
-            ((left && left.power > 0) || (right && right.power > 0)) ? 1 : 0;
-
-        // Rising edge → duplicate
-        if (inputPower === 1 && this.lastInput === 0) {
-            this.duplicate();
+        // Detect Rising Edge
+        if (this.input === 1 && this.lastInput === 0) {
+            this.triggered = true;
         }
 
-        this.lastInput = inputPower;
-        this.power = inputPower;
-
-        if (this.power !== this.lastPower) this.dirtyNeighbors();
+        this.power = this.input ? 100 : 0;
     }
 
-    duplicate() {
-        // Direction vector
+    applyDuplication() {
+        if (this.triggered) {
+            this.executeDuplicate();
+            this.triggered = false; // Reset
+        }
+        
+        // Update lastInput for the next tick's edge detection
+        this.lastInput = this.input;
+    }
+
+    executeDuplicate() {
         const dx = (this.rotation === 1 ? 1 : this.rotation === 3 ? -1 : 0);
         const dy = (this.rotation === 2 ? 1 : this.rotation === 0 ? -1 : 0);
 
-        // Back (source)
-        const bx = this.x - dx;
-        const by = this.y - dy;
+        // Back (Source) and Front (Destination)
+        const bx = this.x - dx, by = this.y - dy;
+        const fx = this.x + dx, fy = this.y + dy;
 
-        // Front (destination)
-        const fx = this.x + dx;
-        const fy = this.y + dy;
-
-        // Bounds
+        // Bounds Check
         if (bx < 0 || bx >= gridWidth || by < 0 || by >= gridHeight) return;
         if (fx < 0 || fx >= gridWidth || fy < 0 || fy >= gridHeight) return;
 
-        const backIdx = by * gridWidth + bx;
+        const source = grid[by * gridWidth + bx];
         const frontIdx = fy * gridWidth + fx;
 
-        const source = grid[backIdx];
-
-        // If no block behind → delete front
+        // 1. If no block behind → delete the block in front
         if (!source) {
-            if (grid[frontIdx]) {
-                grid[frontIdx] = null;
-                dirtyBlocks.add(frontIdx);
-            }
+            grid[frontIdx] = null;
             return;
         }
 
-        // Create a new instance of the same class
+        // 2. Clone the source block (Direct Live Creation)
         const newBlock = new source.constructor(fx, fy, source.rotation);
 
-        // Copy all own properties (deep copy for primitives)
+        // Copy properties (Primitives and deep clones where possible)
         for (let key of Object.keys(source)) {
-            if (key === "x" || key === "y") continue; // handled separately
+            if (key === "x" || key === "y") continue;
             try {
                 newBlock[key] = structuredClone(source[key]);
             } catch {
@@ -1652,23 +1521,8 @@ class Duplicator extends Block {
             }
         }
 
-        // Place new block in front
+        // 3. Place into the LIVE grid
         grid[frontIdx] = newBlock;
-
-        // Dirty everything affected
-        dirtyBlocks.add(frontIdx);
-        newBlock.dirtyNeighbors();
-
-        // Dirty neighbors of front tile
-        const offsets = [
-            [0, -1], [1, 0], [0, 1], [-1, 0]
-        ];
-
-        for (let [ox, oy] of offsets) {
-            const nx = fx + ox, ny = fy + oy;
-            if (nx >= 0 && nx < gridWidth && ny >= 0 && ny < gridHeight)
-                dirtyBlocks.add(ny * gridWidth + nx);
-        }
     }
 
     draw() {

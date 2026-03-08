@@ -20,19 +20,10 @@ window.addEventListener("keydown", (e) => {
         const key = e.key.toUpperCase();
         if (!keysDown.has(key)) {
             keysDown.add(key);
-            // wake up all keyblocks
-            grid.forEach((block, id) => {
-                if (block instanceof KeyBlock) dirtyBlocks.add(id);
-            });
         }
     }
     const key = e.key.toLowerCase();
-    if (key === 'e') { // CW
-        currentRotation = (currentRotation + 1) % 4;
-    } else if (key === 'q') { // CCW
-        currentRotation = (currentRotation + 3) % 4; // +3 is same as -1 mod 4
-    }
-    if (e.code === "Space") { // Space to Play/Pause
+    if (e.code === "Space") {
         e.preventDefault(); // Stop page scrolling
         togglePause();
     }
@@ -52,10 +43,6 @@ window.addEventListener("keydown", (e) => {
 window.addEventListener("keyup", (e) => {
     const key = e.key.toUpperCase();
     keysDown.delete(key);
-    // wake up all keyblocks
-    grid.forEach((block, id) => {
-        if (block instanceof KeyBlock) dirtyBlocks.add(id);
-    });
 });
 
 canvas.addEventListener("mousedown", (e) => {
@@ -133,8 +120,6 @@ canvas.addEventListener("mousemove", (e) => {
             const shouldBeOn = (id === currentId);
             if (block.power !== (shouldBeOn ? 1 : 0)) {
                 block.power = shouldBeOn ? 1 : 0;
-                block.dirtyNeighbors();
-                dirtyBlocks.add(id);
             }
         }
     });
@@ -226,7 +211,6 @@ function handleInteraction(e) {
         }
 
         grid[id] = null;
-        blockToDie.dirtyNeighbors();
     } 
     else if (dragButton === 0) { // Left click
         if (grid[id] !== null) {
@@ -237,10 +221,6 @@ function handleInteraction(e) {
 
             if (newBlock) {
                 grid[id] = newBlock;
-                // Important: Don't call update() manually here if it relies on snapshots.
-                // Instead, ensure the next tick processes it.
-                newBlock.dirtyNeighbors();
-                dirtyBlocks.add(id);
             }
         }
     }
@@ -286,24 +266,17 @@ function tick() {
         block.lastInput = block.input; // Corrected: Live input becomes lastInput
     }
 
-    // 5. Physics/Movement Phase (Double Buffered Grid)
-    let nextGrid = new Array(gridWidth * gridHeight).fill(null);
+    // 5. World Modification Phase (DIRECT LIVE MODIFICATION)
     for (let i = 0; i < grid.length; i++) {
         const block = grid[i];
         if (!block) continue;
 
-        // Movement logic writes to 'nextGrid' to prevent double-processing
-        if (block instanceof Rotator) block.applyRotation(nextGrid);
-        else if (block instanceof Actuator) block.applyActuation(nextGrid);
-        else if (block instanceof Duplicator) block.applyDuplication(nextGrid);
-        else if (block instanceof Repulsor) block.applyRepulsion(nextGrid);
-        else {
-            // Keep block in place if no movement occurred
-            if (!nextGrid[i]) nextGrid[i] = block;
-        }
+        // Call the movement methods directly on the live grid
+        if (block instanceof Rotator) block.applyRotation();
+        else if (block instanceof Actuator) block.applyActuation();
+        else if (block instanceof Duplicator) block.applyDuplication();
+        else if (block instanceof Repulsor) block.applyRepulsion();
     }
-    
-    grid = nextGrid; // Finalize world state
 }
 
 

@@ -9,8 +9,6 @@ let gridWidth = 60;
 let gridHeight = 30;
 let grid = new Array(gridWidth * gridHeight).fill(null);
 let cellSize = canvas.width / gridWidth;
-let dirtyBlocks = new Set();
-
 let snapshot = new Array(grid.length);
 
 let tickRate = 20; // 20 tps
@@ -88,7 +86,6 @@ function importFromJSON(event) {
         cellSize = canvas.width / gridWidth; // Recalculate cell size for rendering
 
         grid = new Array(gridWidth * gridHeight).fill(null);
-        dirtyBlocks.clear();
 
         const constructors = { 
             Wire, Inverter, Diode, Bridge, Switch, Button, 
@@ -120,7 +117,6 @@ function importFromJSON(event) {
                 // Place in the correct slot based on the new gridWidth
                 const id = b.y * gridWidth + b.x;
                 grid[id] = newBlock;
-                dirtyBlocks.add(id);
             }
         });
         
@@ -190,7 +186,6 @@ function closeCommentEditor(val) {
     activeEditingComment.isEditing = false;
 
     const id = activeEditingComment.y * gridWidth + activeEditingComment.x;
-    dirtyBlocks.add(id)
 
     activeEditingComment = null;
     document.getElementById("comment-overlay").remove();
@@ -305,8 +300,6 @@ function resizeGrid(newW, newH) {
     gridHeight = newH;
     grid = newGrid;
     cellSize = canvas.width / gridWidth;
-    
-    grid.forEach((b, i) => { if (b) dirtyBlocks.add(i); });
     
     render();
 }
