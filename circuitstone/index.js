@@ -11,6 +11,14 @@ window.addEventListener("keydown", (e) => {
     if (e.target.tagName === 'TEXTAREA' || e.target.tagName === 'INPUT') {
         return;
     }
+    
+    const key = e.key.toLowerCase();
+
+    if (key === 'e') { // CW
+        currentRotation = (currentRotation + 1) % 4;
+    } else if (key === 'q') { // CCW
+        currentRotation = (currentRotation + 3) % 4; // +3 is same as -1 mod 4
+    }
 
     if (e.ctrlKey && e.key === 'v' && clipboard) {
         pastingMode = true; // render() will now draw clipboard ghost at cursor
@@ -22,7 +30,6 @@ window.addEventListener("keydown", (e) => {
             keysDown.add(key);
         }
     }
-    const key = e.key.toLowerCase();
     if (e.code === "Space") {
         e.preventDefault(); // Stop page scrolling
         togglePause();
