@@ -19,6 +19,7 @@ window.addEventListener("keydown", (e) => {
     } else if (key === 'q') { // CCW
         currentRotation = (currentRotation + 3) % 4; // +3 is same as -1 mod 4
     }
+    document.getElementById("rot-display").innerText = rotationNames[currentRotation];
 
     if (e.ctrlKey && e.key === 'v' && clipboard) {
         pastingMode = true; // render() will now draw clipboard ghost at cursor
@@ -43,8 +44,6 @@ window.addEventListener("keydown", (e) => {
     else if (key === "3") colorPicker.value = "blue";
     else if (key === "4") colorPicker.value = "white";
     else if (key === "5") colorPicker.value = "black";
-
-    document.getElementById("rot-display").innerText = rotationNames[currentRotation];
 });
 
 window.addEventListener("keyup", (e) => {
@@ -165,6 +164,8 @@ canvas.addEventListener("wheel", (e) => {
     } else {
         currentRotation = (currentRotation + 3) % 4;
     }
+
+    document.getElementById("rot-display").innerText = rotationNames[currentRotation];
 }, { passive: false });
 
 function createBlockFromTool(tool, x, y) {
