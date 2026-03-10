@@ -1,0 +1,166 @@
+<!doctype html>
+<html>
+
+<head>
+    <title>CircuitStone Guide</title>
+    <link rel="icon" type="image/png" href="favicon.png">
+    <style>
+        body {
+            background-color: black;
+            color: white;
+        }
+
+        h1 {
+            text-align: center;
+            color: #4dff4d;
+        }
+
+        h2 {
+            text-align: center;
+            color: #4dff4d;
+        }
+
+        h3 {
+            color: #4dff4d;
+        }
+
+        #contentDiv {
+            position: relative;
+            left: 50%;
+            width: 50%;
+            transform: translate(-50%);
+
+            padding: 25px;
+            background-color: #333;
+            border: 3px solid #114411;
+            border-radius: 5px;
+        }
+
+        ul > li {
+            margin-bottom: 20px;
+        }
+    </style>
+</head>
+
+<body>
+<h1>CircuitStone Guide</h1>
+<div id="contentDiv">
+<h2>Controls</h2>
+<ul>
+    <li>Left click to place blocks</li>
+    <li>Right click to delete blocks</li>
+    <li>Press Q/E or Scroll to rotate the current block placement.</li>
+    <li>Press Space to pause or resume the simulation</li>
+    <li>Press S to step one tick in the simulation</li>
+    <li>Press keys 1-5 to select a block color (used by wires, power blocks, and lamps)</li>
+</ul>
+<h2>Components</h2>
+<ul>
+    <li>
+        <h3>Wire</h3>
+        <p>Used to connect components together and carry signals.</p>
+        <ol>
+            <li>Red: Doesn't connect with green or blue wire</li>
+            <li>Green: Doesn't connect with blue or red wire</li>
+            <li>Blue: Doesn't connect with red or green wire</li>
+            <li>White: Connects with all type of wire</li>
+            <li>Black: Only connects to white wires and isn't powered by components</li>
+        </ol>
+    </li>
+    <li>
+        <h3>Inverter</h3>
+        <p>Inverts the signal it receives. 1 -> 0, 0 -> 1. Equivalent to a NOT gate.</p>
+    </li>
+    <li>
+        <h3>Diode</h3>
+        <p>Only lets the signal flow one way. Most components do this already, but I wanted to make a dedicated one.</p>
+    </li>
+    <li>
+        <h3>Bridge</h3>
+        <p>Allows wires to cross (directional) without interfering.</p>
+    </li>
+    <li>
+        <h3>Switch</h3>
+        <p>Outputs a signal toggleable by clicking on it.</p>
+    </li>
+    <li>
+        <h3>Button</h3>
+        <p>Outputs a signal when held down.</p>
+    </li>
+    <li>
+        <h3>Power Block</h3>
+        <p>Outputs a constant signal. Follows the same general rules as the wire colors.</p>
+    </li>
+    <li>
+        <h3>Delay</h3>
+        <p>Delays the signal by an adjustable amount.</p>
+    </li>
+    <li>
+        <h3>Hover Sensor</h3>
+        <p>Outputs a signal when the cursor hovers over it.</p>
+    </li>
+    <li>
+        <h3>Lamp</h3>
+        <p>Lights up in it's color when powered from the input side.</p>
+    </li>
+    <li>
+        <h3>Toggle</h3>
+        <p>Toggles it's state when powered. Requires a components like a diode to read.</p>
+    </li>
+    <li>
+        <h3>Key Block</h3>
+        <p>Gets powered it's bound key is pressed. Click to bind a new key. Requires a component like a diode to read.</p>
+    </li>
+    <li>
+        <h3>Transmitter</h3>
+        <p>Sends a global radio signal when powered. Click to increment the channel and shift+click to decrement.</p>
+    </li>
+    <li>
+        <h3>Receiver</h3>
+        <p>Gets powered when it receives a radio signal on it's channel. Click to increment the channel and shift+click to decrement. Requires a component like a diode to read.</p>
+    </li>
+    <li>
+        <h3>Random</h3>
+        <p>When it receives a signal, it has a 50% chance to be on. Requires a component like a diode to read.</p>
+    </li>
+    <li>
+        <h3>Trigger</h3>
+        <p>Outputs a signal for 1 tick when the input turns on. Equivalent to a rising edge detector. Requires a component like a diode to read.</p>
+    </li>
+    <li>
+        <h3>Note Block</h3>
+        <p>Plays a set note when powered. Click to increment the note and shift+click to decrement.</p>
+    </li>
+    <li>
+        <h3>Rotator</h3>
+        <p>Rotates the block in front of it by 90 degrees in a set direction when powered. Click to toggle the direction.</p>
+    </li>
+    <li>
+        <h3>Actuator</h3>
+        <p>Interacts with the block in front of it when powered, as if you clicked it. Click to toggle the mode:</p>
+        <ul>
+            <li>Green: Sends a normal click</li>
+            <li>Blue: Sends a shift click</li>
+        </ul>
+    </li>
+    <li>
+        <h3>Repulsor</h3>
+        <p>Pushes the block in front of it forward like a piston from an undisclosed open world game.</p>
+    </li>
+    <li>
+        <h3>Detector</h3>
+        <p>Is powered if there is a block in front of it. Requires a component like a diode to read.</p>
+    </li>
+    <li>
+        <h3>Duplicator</h3>
+        <p>Duplicates the block behind it to the position in front of it. Powered from wither side.</p>
+    </li>
+    <li>
+        <h3>Comment</h3>
+        <p>Stores text in it so other people can read it. Can be read by a component if there is text inside.</p>
+    </li>
+</ul>
+</div>
+</body>
+
+</html>

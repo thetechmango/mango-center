@@ -1270,7 +1270,12 @@ class Actuator extends Block {
         ctx.roundRect(-cellSize/2, -cellSize/2, cellSize, cellSize, cellSize * 0.15);
         ctx.fill();
 
-        ctx.strokeStyle = this.reverse ? "#4d4dff" : "#4dff4d";
+        if (this.reverse) {
+            ctx.strokeStyle = this.power ? "#4d4dff" : "#111144";
+        } else {
+            ctx.strokeStyle = this.power ? "#4dff4d" : "#114411";
+        }
+        
         ctx.lineWidth = cellSize * 0.1;
         ctx.lineCap = "round";
         
