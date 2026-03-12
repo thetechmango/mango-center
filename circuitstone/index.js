@@ -187,6 +187,7 @@ function createBlockFromTool(tool, x, y) {
         case "receiver": return new Receiver(x, y);
         case "random":   return new Random(x, y, rot);
         case "trigger":  return new Trigger(x, y, rot);
+        case "extender":  return new Extender(x, y, rot);
         case "noteBlock": return new NoteBlock(x, y, rot);
         case "rotator":  return new Rotator(x, y, rot);
         case "actuator": return new Actuator(x, y, rot);
@@ -242,7 +243,16 @@ function tick() {
     }
 
     // snapshot
-    const stateSnapshot = grid.map(b => b ? { power: b.power, rotation: b.rotation } : null);
+    const stateSnapshot = grid.map(b => {
+        if (!b) return null;
+    
+        return {
+            power: b.power,
+            rotation: b.rotation,
+            powerH: b.powerH ?? 0,
+            powerV: b.powerV ?? 0
+        };
+    });    
 
     // logic
     for (let block of grid) {
@@ -265,15 +275,6 @@ function tick() {
         }
     }
 
-    // commit
-    for (let block of grid) {
-        if (!block) continue;
-        block.lastPower = block.power;
-        block.lastPowerH = block.powerH;
-        block.lastPowerV = block.powerV;
-        block.lastInput = block.input;
-    }
-
     // world modification
     for (let i = 0; i < grid.length; i++) {
         const block = grid[i];
@@ -284,6 +285,15 @@ function tick() {
         else if (block instanceof Actuator) block.applyActuation();
         else if (block instanceof Duplicator) block.applyDuplication();
         else if (block instanceof Repulsor) block.applyRepulsion();
+    }
+
+    // commit
+    for (let block of grid) {
+        if (!block) continue;
+        block.lastPower = block.power;
+        block.lastPowerH = block.powerH;
+        block.lastPowerV = block.powerV;
+        block.lastInput = block.input;
     }
 }
 
@@ -310,9 +320,10 @@ function render() {
             switch: Switch, button: Button, lamp: Lamp, toggle: Toggle, 
             hoverSensor: HoverSensor, delay: Delay, keyBlock: KeyBlock, 
             transmitter: Transmitter, receiver: Receiver, random: Random, 
-            trigger: Trigger, powerBlock: PowerBlock, comment: Comment,
-            rotator: Rotator, noteBlock: NoteBlock, actuator: Actuator,
-            repulsor: Repulsor, detector: Detector, duplicator: Duplicator
+            trigger: Trigger, extender: Extender, powerBlock: PowerBlock,
+            comment: Comment, rotator: Rotator, noteBlock: NoteBlock,
+            actuator: Actuator, repulsor: Repulsor, detector: Detector,
+            duplicator: Duplicator
         };
 
         const PreviewClass = constructors[currentTool];

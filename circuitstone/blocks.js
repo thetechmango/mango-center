@@ -8,26 +8,6 @@ class Block {
         this.isWire = false;
     }
 
-    getNeighbor(dir) {
-        let nx = this.x;
-        let ny = this.y;
-
-        if (dir === 0) ny--;
-        else if (dir === 1) nx++;
-        else if (dir === 2) ny++;
-        else if (dir === 3) nx--;
-
-        // Use global variables 'gridWidth' and 'gridHeight'
-        if (nx < 0 || nx >= gridWidth || ny < 0 || ny >= gridHeight) return null;
-
-        return grid[ny * gridWidth + nx];
-    }
-
-    getBackNeighbor() { return this.getNeighbor((this.rotation + 2) % 4); }
-    getForwardNeighbor() { return this.getNeighbor(this.rotation); }
-    getLeftNeighbor() { return this.getNeighbor((this.rotation + 3) % 4); }
-    getRightNeighbor() { return this.getNeighbor((this.rotation + 1) % 4); }
-
     update(neighbors) {}
 
     interact() {}
@@ -53,11 +33,37 @@ class Block {
     getNeighborPower(dir) {
         const id = this.getNeighborId(dir);
         if (id === null) return 0;
+    
+        const neighbor = grid[id];
+        if (!neighbor) return 0;
 
-        if (this.isWire) {
-            return grid[id] ? grid[id].power : 0;
+        if (neighbor instanceof Bridge) {
+            if (this.isWire) {
+                const isAtOutputA = neighbor.rotation === (dir + 2) % 4;
+                if (isAtOutputA && neighbor.powerH > 0) return neighbor.powerH;
+    
+                const isAtOutputB = ((neighbor.rotation + 1) % 4) === (dir + 2) % 4;
+                if (isAtOutputB && neighbor.powerV > 0) return neighbor.powerV;
+    
+                return 0;
+            }
+
+            const snap = this.readSnapshot[id];
+            if (!snap) return 0;
+    
+            const isAtOutputA = neighbor.rotation === (dir + 2) % 4;
+            if (isAtOutputA && snap.powerH > 0) return snap.powerH;
+    
+            const isAtOutputB = ((neighbor.rotation + 1) % 4) === (dir + 2) % 4;
+            if (isAtOutputB && snap.powerV > 0) return snap.powerV;
+    
+            return 0;
         }
 
+        if (this.isWire) {
+            return neighbor.power;
+        }
+    
         return this.readSnapshot[id] ? this.readSnapshot[id].power : 0;
     }
 
@@ -150,9 +156,16 @@ class Wire extends Block {
                         foundPower = true;
                         break;
                     } 
-                    else if (neighbor instanceof Diode ||neighbor instanceof Inverter || neighbor instanceof Delay) {
+                    else if (neighbor instanceof Diode || neighbor instanceof Inverter) {
                         const pointsAtThis = neighbor.rotation === (dir + 2) % 4;
                         if (neighbor.power > 0 && pointsAtThis) {
+                            foundPower = true;
+                            break;
+                        }
+                    }
+                    else if (neighbor instanceof Delay) {
+                        const pointsAtThis = neighbor.rotation === (dir + 2) % 4;
+                        if (neighbor.history[neighbor.history.length - 1] > 0 && pointsAtThis) {
                             foundPower = true;
                             break;
                         }
@@ -197,27 +210,31 @@ class Wire extends Block {
         ctx.fill();
     
         const neighbors = [
-            { n: this.getNeighbor(0), dx: 0, dy: -cellSize / 2 }, // Up
-            { n: this.getNeighbor(1), dx: cellSize / 2, dy: 0 },  // Right
-            { n: this.getNeighbor(2), dx: 0, dy: cellSize / 2 },  // Down
-            { n: this.getNeighbor(3), dx: -cellSize / 2, dy: 0 }  // Left
+            { id: this.getNeighborId(0), dx: 0, dy: -cellSize / 2 }, // Up
+            { id: this.getNeighborId(1), dx: cellSize / 2, dy: 0 },  // Right
+            { id: this.getNeighborId(2), dx: 0, dy: cellSize / 2 },  // Down
+            { id: this.getNeighborId(3), dx: -cellSize / 2, dy: 0 }  // Left
         ];
     
-        neighbors.forEach(neighbor => {
-            if (!neighbor.n) return; 
+        neighbors.forEach(({ id, dx, dy }) => {
+            if (id === null) return;
     
-            const isWire = neighbor.n instanceof Wire;
+            const neighbor = grid[id];
+            if (!neighbor) return;
+    
+            const isWire = neighbor instanceof Wire;
             const connects = isWire && (
-                this.color === "white" || 
-                neighbor.n.color === "white" || 
-                this.color === neighbor.n.color
+                this.color === "white" ||
+                neighbor.color === "white" ||
+                this.color === neighbor.color
             );
-            
+    
             const isComponent = !isWire && (this.color !== "black");
+    
             if (connects || isComponent) {
                 ctx.beginPath();
                 ctx.moveTo(centerX, centerY);
-                ctx.lineTo(centerX + neighbor.dx, centerY + neighbor.dy);
+                ctx.lineTo(centerX + dx, centerY + dy);
                 ctx.stroke();
             }
         });
@@ -315,12 +332,7 @@ class Diode extends Block {
 }
 
 class Switch extends Block {
-    update() {} 
-
     interact() {
-        this.toggle();
-    }
-    toggle() {
         this.power = this.power === 1 ? 0 : 1;
     }
 
@@ -355,8 +367,6 @@ class Switch extends Block {
 }
 
 class Button extends Block {
-    update() {}
-
     press() {
         this.power = 1;
     }
@@ -390,7 +400,7 @@ class Button extends Block {
 class Bridge extends Block {
     constructor(x, y, rotation = 0) {
         super(x, y, rotation);
-        this.powerH = 0; 
+        this.powerH = 0;
         this.powerV = 0;
         this.lastPowerH = 0;
         this.lastPowerV = 0;
@@ -403,39 +413,22 @@ class Bridge extends Block {
     }
 
     update() {
-        const oldH = this.powerH;
-        const oldV = this.powerV;
+        const backDir = (this.rotation + 2) % 4;  // Lane A input
+        const leftDir = (this.rotation + 3) % 4;  // Lane B input
     
-        // --- Lane A (Horizontal/Forward) ---
-        const inputA = this.getBackNeighbor();
-        if (inputA instanceof Bridge) {
-            // If the neighbor is a Bridge, take its 'Forward' lane power
-            this.powerH = inputA.powerH; 
-        } else {
-            // Otherwise, take standard power (Wires, Switches, etc.)
-            this.powerH = (inputA && inputA.power > 0) ? 1 : 0;
-        }
-    
-        // --- Lane B (Vertical/Left) ---
-        const inputB = this.getLeftNeighbor();
-        if (inputB instanceof Bridge) {
-            // If the neighbor is a Bridge, take its 'Vertical' lane power
-            this.powerV = inputB.powerV;
-        } else {
-            this.powerV = (inputB && inputB.power > 0) ? 1 : 0;
-        }
-    }
+        this.powerH = this.getNeighborPower(backDir);
+        this.powerV = this.getNeighborPower(leftDir);
+    }    
 
     draw() {
         const thick = cellSize * 0.2;
         const len = cellSize * 0.4;
 
         ctx.lineCap = "round";
-    
         ctx.save();
         ctx.rotate((this.rotation - 1) * Math.PI / 2);
 
-        // Full tile rounded base
+        // Base
         ctx.fillStyle = "#333";
         ctx.beginPath();
         ctx.roundRect(
@@ -443,24 +436,24 @@ class Bridge extends Block {
             -cellSize/2,
             cellSize,
             cellSize,
-            cellSize * 0.15 // corner radius
+            cellSize * 0.15
         );
         ctx.fill();
 
-        // Lane A (horizontal)
+        // Lane A
         ctx.strokeStyle = this.powerH ? "#ff4d4d" : "#441111";
         ctx.lineWidth = thick;
         ctx.beginPath();
         ctx.moveTo(-len, 0);
         ctx.lineTo(len, 0);
         ctx.stroke();
-    
-        // Arrow for Lane A (left side)
+
+        // Lane A arrow
         {
             const triW = cellSize * 0.25;
             const triH = cellSize * 0.20;
             const offset = cellSize * 0.5;
-    
+
             ctx.fillStyle = this.powerH ? "#ff4d4d" : "#441111";
             ctx.beginPath();
             ctx.moveTo(-offset + triW, 0);
@@ -469,20 +462,20 @@ class Bridge extends Block {
             ctx.closePath();
             ctx.fill();
         }
-    
-        // Lane B (vertical)
+
+        // Lane B
         ctx.strokeStyle = this.powerV ? "#ff4d4d" : "#441111";
         ctx.beginPath();
         ctx.moveTo(0, -len);
         ctx.lineTo(0, len);
         ctx.stroke();
-    
-        // Arrow for Lane B (top side)
+
+        // Lane B arrow
         {
             const triW = cellSize * 0.25;
             const triH = cellSize * 0.20;
             const offset = cellSize * 0.5;
-    
+
             ctx.fillStyle = this.powerV ? "#ff4d4d" : "#441111";
             ctx.beginPath();
             ctx.moveTo(0, -offset + triW);
@@ -491,7 +484,7 @@ class Bridge extends Block {
             ctx.closePath();
             ctx.fill();
         }
-    
+
         ctx.restore();
     }
 }
@@ -500,10 +493,6 @@ class Lamp extends Block {
     constructor(x, y, rotation = 0) {
         super(x, y, rotation);
         this.color = document.getElementById("wire-color").value;
-    }
-
-    prepareNextTick() {
-        this.lastPower = this.power;
     }
 
     update() {
@@ -628,7 +617,7 @@ class HoverSensor extends Block {
         );
         ctx.fill();
     
-        // Donut indicator ring
+        // Indicator ring
         ctx.strokeStyle = this.power ? "#00ff00" : "#225522";
         ctx.lineWidth = ringWidth;
         ctx.beginPath();
@@ -657,11 +646,10 @@ class Delay extends Block {
     }
 
     update() {
-        const input = this.getBackNeighbor();
-        const inputPower = (input && input.power > 0) ? 1 : 0;
-    
-        // Perform the shift
-        this.history.unshift(inputPower);
+        const inputDir = (this.rotation + 2) % 4;
+        this.inputPower = this.getNeighborPower(inputDir);
+
+        this.history.unshift(this.inputPower);
         this.power = this.history.pop();
     }
 
@@ -732,15 +720,13 @@ class KeyBlock extends Block {
     interact() {
         // Enter "Binding Mode"
         this.isBinding = true;
-        dirtyBlocks.add(this.y * gridWidth + this.x);
         
-        // Listen for the NEXT key press globally
+        // Listen for the next key press
         const listener = (e) => {
             e.preventDefault();
             this.targetKey = e.key.toUpperCase();
             this.isBinding = false;
             window.removeEventListener("keydown", listener);
-            dirtyBlocks.add(this.y * gridWidth + this.x);
             render();
         };
         window.addEventListener("keydown", listener);
@@ -864,11 +850,8 @@ class Random extends Block {
     }
 
     update() {
-        const input = this.getBackNeighbor();
-        const inputPower = (input && input.power > 0) ? 1 : 0;
-
         // Trigger on rising edge
-        if (this.lastInput === 0 && inputPower === 1) {
+        if (this.lastInput === 0 && this.inputPower === 1) {
             this.power = Math.random() > 0.5 ? 1 : 0;
         }
     }
@@ -1155,13 +1138,14 @@ class Rotator extends Block {
             this.triggered = true;
         }
 
-        this.power = this.input ? 100 : 0;
+        this.power = this.input ? 1 : 0;
     }
 
     applyRotation() {
         if (this.triggered) {
-            // Find the block directly in front of the Rotator in the LIVE grid
-            const target = this.getForwardNeighbor();
+            // Find the block directly in front of the Rotator in the live grid
+            const id = this.getNeighborId(this.rotation);
+            const target = id !== null ? grid[id] : null;
             
             if (target && typeof target.rotation !== 'undefined') {
                 const step = this.isCCW ? -1 : 1;
@@ -1246,12 +1230,13 @@ class Actuator extends Block {
             this.triggered = true;
         }
 
-        this.power = this.input ? 100 : 0;
+        this.power = this.input;
     }
 
     applyActuation() {
         if (this.triggered) {
-            const target = this.getForwardNeighbor();
+            const id = this.getNeighborId(this.rotation);
+            const target = id !== null ? grid[id] : null;
             if (target && typeof target.interact === "function") {
                 target.interact({ shiftKey: this.reverse });
             }
@@ -1309,20 +1294,15 @@ class Repulsor extends Block {
     update() {
         const backDir = (this.rotation + 2) % 4;
         this.input = this.getNeighborPower(backDir) > 0 ? 1 : 0;
-        this.power = this.input ? 100 : 0;
+        this.power = this.input;
     }
 
     applyRepulsion() {
-        const backDir = (this.rotation + 2) % 4;
-        
-        const neighbor = this.getNeighbor(backDir);
-        const liveInput = (neighbor && neighbor.power > 0) ? 1 : 0;
-
-        if (liveInput === 1 && this.lastInput === 0) {
+        if (this.input === 1 && this.lastInput === 0) {
             this.executePush();
         }
 
-        this.lastInput = liveInput;
+        this.lastInput = this.input;
     }
 
     executePush() {
@@ -1395,7 +1375,7 @@ class Detector extends Block {
     }
 
     update() {
-        const target = this.getForwardNeighbor();
+        const target = this.getNeighborState(this.rotation);
         const hasBlock = target ? 1 : 0;
 
         this.power = hasBlock;
@@ -1539,4 +1519,70 @@ class Duplicator extends Block {
 
         ctx.restore();
     }
+}
+
+class Extender extends Block {
+    constructor(x, y, rotation = 0) {
+        super(x, y, rotation);
+        this.input = 0;
+        this.tail = 0;
+    }
+
+    update() {
+        const backDir = (this.rotation + 2) % 4;
+        this.input = this.getNeighborPower(backDir) > 0 ? 1 : 0;
+
+        if (this.input === 1) {
+            // Input ON → reset to full 2-tick extension
+            this.tail = 2;
+        } else if (this.tail > 0) {
+            // Input OFF → decay
+            this.tail--;
+        }
+
+        this.power = (this.input === 1 || this.tail > 0) ? 1 : 0;
+    }
+
+    draw() {
+        const baseSize = cellSize * 0.5;
+
+        // Full tile rounded base
+        ctx.fillStyle = "#333";
+        ctx.beginPath();
+        ctx.roundRect(
+            -cellSize/2,
+            -cellSize/2,
+            cellSize,
+            cellSize,
+            cellSize * 0.15
+        );
+        ctx.fill();
+    
+        ctx.save();
+        ctx.rotate(Math.PI / 4); // rotate 45 degrees
+
+        // Diamond indicator
+        const inner = baseSize * 0.55;
+        ctx.fillStyle = this.power ? "#ff4d4d" : "#441111";
+    
+        ctx.beginPath();
+        ctx.rect(-inner, -inner, inner * 2, inner * 2);
+        ctx.fill();
+    
+        ctx.restore();
+
+        ctx.save();
+        ctx.rotate((this.rotation - 1) * Math.PI / 2);
+
+        // Input indicator
+        const inputColor = this.lastInput ? "#ff4d4d" : "#441111"; 
+        ctx.fillStyle = inputColor;
+        ctx.beginPath();
+        ctx.moveTo(-cellSize*0.5 + cellSize*0.2, 0);
+        ctx.lineTo(-cellSize*0.5, -cellSize*0.15);
+        ctx.lineTo(-cellSize*0.5, cellSize*0.15);
+        ctx.fill();
+
+        ctx.restore();
+    }    
 }

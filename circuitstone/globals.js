@@ -11,7 +11,7 @@ let grid = new Array(gridWidth * gridHeight).fill(null);
 let cellSize = canvas.width / gridWidth;
 let snapshot = new Array(grid.length);
 
-let tickRate = 20; // 20 tps
+let tickRate = 20;
 
 let currentTool = "wire";
 let currentRotation = 1;
@@ -91,8 +91,8 @@ function importFromJSON(event) {
             Wire, Inverter, Diode, Bridge, Switch, Button, 
             PowerBlock, Lamp, Toggle, HoverSensor, Delay, 
             KeyBlock, Transmitter, Receiver, Random, Trigger,
-            NoteBlock, Comment, Rotator, Actuator, Repulsor,
-            Detector, Duplicator
+            Extender, NoteBlock, Comment, Rotator, Actuator,
+            Repulsor, Detector, Duplicator
         };
 
         parsed.data.forEach((b) => {
