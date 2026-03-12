@@ -1168,9 +1168,8 @@ class Rotator extends Block {
         ctx.beginPath();
         ctx.roundRect(-cellSize/2, -cellSize/2, cellSize, cellSize, cellSize * 0.15);
         ctx.fill();
-    
-        // 2. The Arc (Offset by 45 degrees)
-        ctx.strokeStyle = this.power ? "#ff4d4d" : "#441111";
+
+        ctx.strokeStyle = this.power ? "#4d4dff" : "#111144";
         ctx.lineWidth = cellSize * 0.1;
         ctx.lineCap = "round";
         
@@ -1181,8 +1180,7 @@ class Rotator extends Block {
         ctx.arc(0, 0, cellSize * 0.25, startAngle, endAngle);
         ctx.stroke();
     
-        // 3. The Tip (Circle/Knob)
-        ctx.fillStyle = this.power ? "#ff4d4d" : "#441111";
+        ctx.fillStyle = this.power ? "#4d4dff" : "#111144";
         
         ctx.save();
         // Position at Top end if CCW, Bottom end if CW
