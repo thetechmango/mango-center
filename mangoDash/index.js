@@ -27,7 +27,6 @@ let strokeWidth;
 // Irrelevant with images
 let playerFill = "white";
 let playerStroke = "black";
-//
 
 let blockFillTop = "rgba(0,0,0,1)";
 let blockFillBottom = "rgba(0,0,0,0)";
@@ -1266,17 +1265,17 @@ let ground = new Ground(0, 200);
 // Level
 new Spike(inBlocks(14), -inBlocks(1));
 new Spike(inBlocks(15.5), -inBlocks(4), unit, unit, Math.PI);
-new Block(inBlocks(15.5), -inBlocks(5))
+new Block(inBlocks(15.5), -inBlocks(5));
 new Spike(inBlocks(17), -inBlocks(1));
 
-new Block(inBlocks(19), -inBlocks(1), unit, unit)
-new Block(inBlocks(20), -inBlocks(1), unit, unit)
-new Block(inBlocks(21), -inBlocks(1), unit, unit)
+new Block(inBlocks(19), -inBlocks(1), unit, unit);
+new Block(inBlocks(20), -inBlocks(1), unit, unit);
+new Block(inBlocks(21), -inBlocks(1), unit, unit);
 
-new Block(inBlocks(24), -inBlocks(3), unit, unit)
-new Block(inBlocks(25), -inBlocks(3), unit, unit)
-new Block(inBlocks(28), -inBlocks(5), unit, unit)
-new Block(inBlocks(29), -inBlocks(5), unit, unit)
+new Block(inBlocks(24), -inBlocks(3), unit, unit);
+new Block(inBlocks(25), -inBlocks(3), unit, unit);
+new Block(inBlocks(28), -inBlocks(5), unit, unit);
+new Block(inBlocks(29), -inBlocks(5), unit, unit);
 
 new Spike(inBlocks(29), -inBlocks(1));
 
