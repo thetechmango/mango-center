@@ -267,7 +267,7 @@ function drawStats() {
 
 
 function render() {
-    ctx.fillStyle = '#1117';
+    ctx.fillStyle = '#111';
     ctx.fillRect(0, 0, canvas.width, canvas.height);
 
     world.agents.forEach(a => {
