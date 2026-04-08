@@ -8,6 +8,8 @@ function resize() {
     canvas.height = window.innerHeight * window.devicePixelRatio;
     canvas.style.width = window.innerWidth + 'px';
     canvas.style.height = window.innerHeight + 'px';
+
+    ctx.setTransform(1, 0, 0, 1, 0, 0); 
     ctx.scale(window.devicePixelRatio, window.devicePixelRatio);
 }
 window.addEventListener('resize', resize);
@@ -67,7 +69,6 @@ class World {
     }
 }
 
-
 class Agent {
     constructor(x, y, brain) {
         this.x = x;
@@ -115,11 +116,14 @@ class Agent {
     
 
     spawnTarget() {
-        // Randomize target within a range of the center or agent
-        this.target.x = Math.random() * window.innerWidth;
-        this.target.y = Math.random() * window.innerHeight;
+        const radius = 300;
+        const angle = Math.random() * Math.PI * 2;
+        const dist = Math.random() * radius + 100; // Min distance 100, max 400
+    
+        this.target.x = this.x + Math.cos(angle) * dist;
+        this.target.y = this.y + Math.sin(angle) * dist;
     }
-
+    
     getSensors() {
         // 1. Vector to Target (Relative Position)
         const dx = this.target.x - this.x;
@@ -267,40 +271,73 @@ function drawStats() {
 
 
 function render() {
+    const champion = world.agents[0];
+    
     ctx.fillStyle = '#111';
-    ctx.fillRect(0, 0, canvas.width, canvas.height);
+    ctx.fillRect(0, 0, window.innerWidth, window.innerHeight);
 
+    ctx.save();
+    // Folow champion
+    ctx.translate(window.innerWidth / 2 - champion.x, window.innerHeight / 2 - champion.y);
+
+    // --- DRAW FAINT GRID ---
+    const gridSize = 100;
+    const viewLeft = champion.x - window.innerWidth / 2;
+    const viewTop = champion.y - window.innerHeight / 2;
+    const viewRight = champion.x + window.innerWidth / 2;
+    const viewBottom = champion.y + window.innerHeight / 2;
+
+    ctx.strokeStyle = 'rgba(255, 255, 255, 0.05)'; // Very faint white
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+
+    // Vertical lines
+    for (let x = Math.floor(viewLeft / gridSize) * gridSize; x <= viewRight; x += gridSize) {
+        ctx.moveTo(x, viewTop);
+        ctx.lineTo(x, viewBottom);
+    }
+
+    // Horizontal lines
+    for (let y = Math.floor(viewTop / gridSize) * gridSize; y <= viewBottom; y += gridSize) {
+        ctx.moveTo(viewLeft, y);
+        ctx.lineTo(viewRight, y);
+    }
+    ctx.stroke();
+
+    // Draw everything relative to the camera
     world.agents.forEach(a => {
-        const isChampion = (a === world.agents[0]);
-        ctx.strokeStyle = isChampion ? 'rgba(0, 255, 0, 0.1)' : 'rgba(255, 255, 255, 0.1)';
-        ctx.lineWidth = 1;
+        const isChampion = (a === champion);
+        
+        // Draw target line
+        ctx.strokeStyle = isChampion ? 'rgba(0, 255, 0, 0.2)' : 'rgba(255, 255, 255, 0.05)';
         ctx.beginPath();
         ctx.moveTo(a.x, a.y);
         ctx.lineTo(a.target.x, a.target.y);
         ctx.stroke();
-    
-        // Draw the target itself
-        ctx.fillStyle = 'red';
-        ctx.fillRect(a.target.x - 2, a.target.y - 2, 4, 4);
-    
-        // Draw the Agent
+
+        // Draw individual target
+        ctx.fillStyle = isChampion ? '#ff0000' : 'rgba(255, 0, 0, 0.2)';
+        ctx.beginPath(); ctx.arc(a.target.x, a.target.y, 6, 0, Math.PI * 2); ctx.fill();
+
+        // Draw Agent
         ctx.save();
         ctx.translate(a.x, a.y);
         ctx.rotate(a.angle);
-        ctx.fillStyle = isChampion ? 'rgba(0, 255, 0, 0.8)' : 'rgba(255, 255, 255, 0.2)';
+        ctx.fillStyle = isChampion ? '#00ff00' : 'rgba(255, 255, 255, 0.2)';
         ctx.fillRect(-5, -5, 10, 10);
         ctx.restore();
     });
 
-    const champion = world.agents[0];
+    ctx.restore();
+
     if (champion && champion.brain) {
         // Draw in a box at the top-right
         ctx.fillStyle = "rgba(0,0,0,0.5)";
-        ctx.fillRect(window.innerWidth - 220, 20, 200, 200);
-        drawBrain(champion.brain, ctx, window.innerWidth - 220, 40, 160, 160);
+        ctx.fillRect(window.innerWidth - 250, 20, 225, 225);
+        drawBrain(champion.brain, ctx, window.innerWidth - 250, 30, 225, 225);
         
         ctx.fillStyle = "white";
-        ctx.fillText("Champion Brain", window.innerWidth - 200, 35);
+        ctx.fillText("Champion Brain", window.innerWidth - 200, 45);
     }
 
     drawStats();

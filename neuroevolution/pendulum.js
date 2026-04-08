@@ -8,6 +8,8 @@ function resize() {
     canvas.height = window.innerHeight * window.devicePixelRatio;
     canvas.style.width = window.innerWidth + 'px';
     canvas.style.height = window.innerHeight + 'px';
+
+    ctx.setTransform(1, 0, 0, 1, 0, 0); 
     ctx.scale(window.devicePixelRatio, window.devicePixelRatio);
 }
 window.addEventListener('resize', resize);
@@ -309,7 +311,7 @@ function drawAgent(a) {
 
 function render() {
     ctx.fillStyle = '#111';
-    ctx.fillRect(0, 0, canvas.width, canvas.height);
+    ctx.fillRect(0, 0, window.innerWidth, window.innerHeight); 
 
     world.agents.forEach(a => {
         if (a.dead) return;
