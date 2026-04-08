@@ -61,7 +61,7 @@ class World {
 }
 
 
-export class Agent {
+class Agent {
     constructor(brain) {
         this.brain = brain;
         this.reset();
@@ -70,59 +70,77 @@ export class Agent {
     reset() {
         this.x = window.innerWidth / 2;
         this.vx = 0;
-        // Start both segments facing DOWN (Math.PI)
+        // Start both segments facing down
         this.th1 = Math.PI; 
         this.v1 = 0;
         this.th2 = Math.PI;
         this.v2 = 0;
+
+        this.totalRotation = 0;
+        this.lastTh1 = this.th1;
+        this.lastTh2 = this.th2;
         
         this.fitness = 0;
         this.consecutiveFramesUp = 0;
         this.dead = false;
 
-        // Constants (Adjust for "feel")
+        // Constants
         this.L1 = 60; this.L2 = 60; // Segment lengths
         this.m1 = 1.0; this.m2 = 1.0; // Masses
-        this.g = -0.5; // Gravity
+        this.g = -0.4; // Gravity
+        this.d = 0.005; // Arm drag
+        this.stength = 3; // Sideways force multiplier
     }
 
     update() {
         if (this.dead) return;
-
-        // 1. SENSORS: [th1, v1, th2, v2, x_rel, vx]
-        // Using sin/cos for angles is better for "wrap-around" logic
+    
         const inputs = [
             Math.sin(this.th1), Math.cos(this.th1), this.v1,
             Math.sin(this.th2), Math.cos(this.th2), this.v2,
             (this.x / window.innerWidth) - 0.5,
             this.vx / 10
         ];
-
-        // 2. BRAIN: 1 Output for Cart Acceleration
+    
         const [out] = this.brain.activate(inputs);
-        const accel = (out - 0.5) * 2.0; // Map 0..1 to -1..1 force
-
-        // 3. PHYSICS (Lagrangian acceleration)
+        const accel = (out - 0.5) * this.stength;
+    
         this.calculatePhysics(accel);
-
+    
+        // Safety: If physics explodes (NaN), reset the agent so it doesn't "delete"
+        if (isNaN(this.x) || isNaN(this.v1)) {
+            this.reset();
+            return;
+        }
+    
         const currentHeight = -(this.L1 * Math.cos(this.th1) + this.L2 * Math.cos(this.th2));
         const threshold = (this.L1 + this.L2) * 0.85;
         
         if (currentHeight < threshold) {
-            this.consecutiveFramesUp++;
-            
-            // Reward scales with how LONG they stay there
-            // This makes 'holding' worth way more than 'spinning'
-            this.fitness += 100 + (this.consecutiveFramesUp * 100);
-        
-            // ADD A STABILITY BONUS: Reward low velocity while at the top
+            // High speed = lower reward multiplier
             const speed = Math.abs(this.v1) + Math.abs(this.v2);
-            this.fitness += 10.0 / (1.0 + speed);
+            const stability = 1.0 / (1.0 + speed);
+    
+            // Only increment time if they aren't moving too fast
+            if (speed < 2.0) {
+                this.consecutiveFramesUp++;
+            }
+    
+            // Exponential reward for time, but scaled by stability
+            this.fitness += Math.pow(this.consecutiveFramesUp, 1.5) * stability;
         } else {
-            this.consecutiveFramesUp = 0; // Reset if they fall or spin out
-            this.fitness += 0.01;
+            this.consecutiveFramesUp = 0;
+            this.fitness += 0.001; 
         }
+
+        // Arm speed penalty
+        const totalSpeedSq = (this.v1 * this.v1) + (this.v2 * this.v2);
+        const speedPenalty = totalSpeedSq * 10;
+        this.fitness -= speedPenalty;
+
+        if (this.fitness < 0) this.fitness = 0;
     }
+    
 
     calculatePhysics(brainOutputAccel) {
         let effectiveAccel = brainOutputAccel;
@@ -132,6 +150,14 @@ export class Agent {
         const leftWall = padding;
         const rightWall = window.innerWidth - padding;
     
+        if (this.x <= leftWall || this.x >= rightWall) {
+            this.dead = true;
+            // Apply a one-time penalty to their total fitness
+            this.fitness *= 0.5; 
+            return; // Stop processing physics for this agent
+        }
+
+        /*
         if (this.x <= leftWall && effectiveAccel < 0) {
             // Pushing LEFT into the LEFT wall
             this.x = leftWall;
@@ -143,6 +169,7 @@ export class Agent {
             this.vx = 0;
             effectiveAccel = 0; // The wall pushes back, net acceleration is 0
         }
+            */
     
         // 2. NOW use effectiveAccel for the rest of the math
         const { g, m1, m2, L1, L2, th1, th2, v1, v2 } = this;
@@ -166,6 +193,11 @@ export class Agent {
         // 3. Apply updates
         this.v1 += a1;
         this.v2 += a2;
+
+        const maxSpeed = 10; // Prevent the math from exploding
+        this.v1 = Math.max(-maxSpeed, Math.min(maxSpeed, this.v1));
+        this.v2 = Math.max(-maxSpeed, Math.min(maxSpeed, this.v2));
+
         this.th1 += this.v1;
         this.th2 += this.v2;
     
@@ -173,9 +205,9 @@ export class Agent {
         this.x += this.vx;
     
         // Damping
-        this.v1 *= 0.99;
-        this.v2 *= 0.99;
-        this.vx *= 0.95;
+        this.v1 *= 1 - this.d;
+        this.v2 *= 1 - this.d;
+        this.vx *= 0.99;
     }     
 }
 
@@ -283,7 +315,7 @@ function drawAgent(a) {
     const isChampion = (a === world.agents[0]);
     
     // Draw Cart
-    ctx.fillStyle = isChampion ? 'rgba(0, 255, 0, 0.8)' : 'rgba(255, 255, 255, 0.2)';
+    ctx.fillStyle = isChampion ? 'rgba(0, 255, 0, 0.8)' : 'rgba(255, 255, 255, 0.1)';
     ctx.beginPath(); ctx.arc(a.x, cartY, 20, 0, 7); ctx.fill();
 
     // Calculate Joint 1
@@ -295,7 +327,7 @@ function drawAgent(a) {
     const y2 = y1 - Math.cos(a.th2) * a.L2;
 
     // Draw Arms
-    ctx.strokeStyle = isChampion ? 'rgba(0, 255, 0, 0.8)' : 'rgba(255, 255, 255, 0.2)';
+    ctx.strokeStyle = isChampion ? 'rgba(0, 255, 0, 0.8)' : 'rgba(255, 255, 255, 0.05)';
     ctx.lineWidth = 2;
     ctx.beginPath();
     ctx.moveTo(a.x, cartY);
@@ -304,7 +336,7 @@ function drawAgent(a) {
     ctx.stroke();
     
     // Draw Bobs
-    ctx.fillStyle = isChampion ? 'rgba(0, 255, 0, 0.8)' : 'rgba(255, 255, 255, 0.2)';
+    ctx.fillStyle = isChampion ? 'rgba(0, 255, 0, 0.8)' : 'rgba(255, 255, 255, 0.1)';
     ctx.beginPath(); ctx.arc(x1, y1, 3, 0, 7); ctx.fill();
     ctx.beginPath(); ctx.arc(x2, y2, 3, 0, 7); ctx.fill();
 }
