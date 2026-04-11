@@ -227,8 +227,6 @@ export const ui = {
         for (const [key, value] of Object.entries(props)) {
             if (key.startsWith("on")) {
                 const eventName = key.slice(2).toLowerCase();
-                // Hook the DOM event to the onevent method
-                instance.el.addEventListener(eventName, (e) => instance.onevent(eventName, e));
                 // Store the specific handler
                 instance[`handle_${eventName}`] = value;
             } 
@@ -292,7 +290,7 @@ export const ui = {
         instance.el = document.createElement(tag);
         instance.el.style.display = 'flex';
         instance._initEventListeners();
-        
+
         return this._create(instance, props, children);
     },
 
