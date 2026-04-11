@@ -1,0 +1,88 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+    <title>UI Tool Test</title>
+</head>
+
+<body>
+    <!-- The root where we will mount our UI -->
+    <div id="app"></div>
+
+    <script type="module">
+        import { ui } from './ui.js';
+
+        Object.assign(ui.defaults.global, {
+            transition: 'transform 0.05s ease-out, background 0.2s',
+            accentColor: '#46e'
+        })
+        ui.defaults.panel = {
+            background: '#f4f4f4',
+            borderRadius: '14px',
+            border: '2px solid #ccc',
+            gap: '10px',
+            padding: '10px'
+        };
+        ui.defaults.button = {
+            background: '#46e',
+            color: 'white',
+            hover: {
+                background: '#24c', transform: 'scale(1.05)'
+            },
+            active: {
+                background: '#8af', transform: 'scale(0.95)'
+            },
+            border: 'none',
+            borderRadius: '4px',
+            cursor: 'pointer'
+        };
+
+        // 2. Build a test interface
+        const myApp = 
+        ui.panel({ style: { padding: '20px', width: '300px' } }, [
+            ui.label({ text: 'Test Panel', style: { fontWeight: 'bold', marginBottom: '10px' } }),
+
+            ui.row({ style: { alignItems: 'center' } }, [
+                ui.label({ text: 'Enable Slider Logging: ' }),
+                ui.checkbox({ value: false })
+            ]),
+
+            ui.slider({ value: 50, min: 0, max: 100 }),
+
+            ui.row({ style: { justifyContent: 'spaceEvenly'} }, [
+                ui.button({ text: '1', style: { width: '50px', height: '50px' } }),
+                ui.button({ text: '2', style: { width: '50px', height: '50px' } }),
+                ui.button({ text: '3', style: { width: '50px', height: '50px' } }),
+                ui.button({ text: '4', style: { width: '50px', height: '50px' } }),
+                ui.button({ text: '5', style: { width: '50px', height: '50px' } }),
+                ui.button({ text: '6', style: { width: '50px', height: '50px' } })
+            ]),
+
+            ui.button({ text: 'Save Configuration', onclick: () => alert('Saved!') })
+        ]);
+
+        // left edge, 20px out, 50% down the screen
+        myApp.position('right', 10, 50);
+
+        // 4. Mount it to the screen
+        ui.mount(myApp, document.getElementById('app'));
+
+        for (const button of myApp.children[3].children) {
+            button.onevent = (name, e) => {
+                if (name === "click") console.log(button.el.innerText);
+            }
+            console.log("listener added for: " + button.el.innerText);
+        }
+
+        function loop() {
+            if (myApp.children[1].children[1].value) {
+                console.log(myApp.children[2].value);
+            }
+            requestAnimationFrame(loop);
+        }
+
+        loop();
+    </script>
+</body>
+
+</html>
