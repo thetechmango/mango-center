@@ -134,6 +134,15 @@ class Textarea extends UIElement {
     }
 }
 
+class Divider extends UIElement {
+    constructor() {
+        super();
+        this.el = document.createElement('div');
+        this.el.style.alignSelf = 'stretch';
+        this.el.style.flexShrink = '0';
+    }
+}
+
 export const ui = {
     defaults: {
         global: {
@@ -146,7 +155,8 @@ export const ui = {
         button: { padding: '5px 10px', cursor: 'pointer' },
         slider: { width: '100%' },
         checkbox: { cursor: 'pointer' },
-        textarea: { minHeight: '100px', fontFamily: 'monospace' }
+        textarea: { minHeight: '100px', fontFamily: 'monospace' },
+        divider: { background: '#fff' }
     },
 
     _create(instance, props = {}, children = []) {
@@ -283,6 +293,22 @@ export const ui = {
 
     textarea(props, children) {
         return this._create(new Textarea(), props, children);
+    },
+
+    divider(props = {}) {
+        const instance = new Divider();
+        
+        const thickness = props.thickness || '1px';
+        const margin = props.margin || '5px';
+
+        // Check if we are inside a row or col style-wise
+        const isRow = props.style?.flexDirection === 'row';
+
+        instance.el.style.width = isRow ? thickness : 'auto';
+        instance.el.style.height = isRow ? 'auto' : thickness;
+        instance.el.style.margin = isRow ? `0 ${margin}` : `${margin} 0`;
+
+        return this._create(instance, props);
     },
 
     el(tag, props, children) {

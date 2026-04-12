@@ -1,4 +1,5 @@
 import { NEAT, Genome, Connection } from './neat-engine.js';
+import { ui } from '../ui.js';
 
 const canvas = document.getElementById("canvas");
 const ctx = canvas.getContext('2d');
@@ -17,18 +18,10 @@ resize();
 
 let fastMode = false;
 
-window.addEventListener('keydown', (e) => {
-    if (e.code === 'Space') {
-        fastMode = !fastMode;
-        console.log("Fast Mode:", fastMode ? "ON" : "OFF");
-    }
-});
-
 class World {
     constructor(popSize) {
         this.popSize = popSize;
         this.timer = 0;
-        this.maxTime = 1000;
         this.generation = 1;
         
         // Use the engine to manage the population
@@ -65,7 +58,18 @@ class World {
     update() {
         this.timer++;
         this.agents.forEach(a => a.update());
-        if (this.timer >= this.maxTime) this.evolve();
+        
+        // Sync current state to UI
+        stats.timer.el.innerText = `TIME: ${this.timer}`;
+        
+        // Update generation limit from the UI slider
+        if (this.timer >= controls.maxTime.value) {
+            this.evolve();
+            stats.gen.el.innerText = `GEN: ${this.generation}`;
+            // Get highest score for the UI
+            const best = Math.max(...this.agents.map(a => a.score));
+            stats.fitness.el.innerText = `BEST: ${best}`;
+        }
     }
 }
 
@@ -259,16 +263,50 @@ function drawBrain(brain, ctx, x, y, width, height) {
     });
 }
 
-function drawStats() {
-    ctx.fillStyle = "white";
-    ctx.font = "16px monospace";
-    ctx.fillText(`Generation: ${world.generation}`, 20, 30);
-    ctx.fillText(`Timer: ${world.timer} / ${world.maxTime}`, 20, 50);
-    ctx.fillText(`Fast Mode: ${fastMode ? "ON (100x)" : "OFF"}`, 20, 70);
-    ctx.fillText(`Best Score: ${world.agents[0].score}`, 20, 90);
-}
+Object.assign(ui.defaults.global, {
+    fontFamily: 'monospace',
+    accentColor: '#0f0'
+});
 
+ui.defaults.panel = {
+    background: 'rgba(20, 20, 20, 0.8)',
+    color: '#0f0',
+    borderRadius: '10px',
+    border: '1px solid #0f0',
+    padding: '15px'
+};
 
+const stats = {
+    gen: ui.label({ text: 'GEN: 1' }),
+    fitness: ui.label({ text: 'BEST: 0' }),
+    timer: ui.label({ text: 'TIME: 0' })
+};
+
+const controls = {
+    fastMode: ui.checkbox({ value: false }),
+    simSpeed: ui.slider({ value: 1, min: 1, max: 20 }),
+    maxTime: ui.slider({ value: 1000, min: 100, max: 5000 })
+};
+
+const dashboard = ui.panel({ style: { width: '250px' } }, [
+    ui.label({ text: 'NEAT Monitor', style: { fontWeight: 'bold'} }),
+    ui.divider({ style: { background: '#0f0'  } }),
+    stats.gen,
+    stats.fitness,
+    stats.timer,
+    ui.divider({ style: { background: '#0f0'  } }),
+    
+    ui.row({ style: { marginTop: '10px' } }, [
+        ui.label({ text: 'Fast Mode:' }),
+        controls.fastMode
+    ]),
+    ui.label({ text: 'Simulation Speed:' }),
+    controls.simSpeed,
+    ui.label({ text: 'Generation Length:' }),
+    controls.maxTime
+]);
+
+ui.mount(dashboard.position('left', 20, 50));
 
 function render() {
     const champion = world.agents[0];
@@ -339,18 +377,20 @@ function render() {
         ctx.fillStyle = "white";
         ctx.fillText("Champion Brain", window.innerWidth - 200, 45);
     }
-
-    drawStats();
 }
 
 const world = new World(50);
 
 function loop() {
-    const iterations = fastMode ? 100 : 1;
+    // One generation per frame with fast mode
+    const iterations = controls.fastMode.value ? controls.maxTime.value : controls.simSpeed.value;
     
     for (let i = 0; i < iterations; i++) {
         world.update();
     }
+
+    stats.timer.el.innerText = `TIME: ${world.timer}`;
+    stats.gen.el.innerText = `GEN: ${world.generation}`;
 
     render();
     requestAnimationFrame(loop);
