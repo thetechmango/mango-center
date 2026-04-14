@@ -23,6 +23,16 @@ class UIElement {
         });
     }
 
+    get text() {
+        return this.el ? this.el.innerText : "";
+    }
+
+    set text(newText) {
+        if (!this.el) return;
+        this.el.innerText = newText;
+        this.onevent("textChange", newText);
+    }
+
     get value() {
         return this._value;
     }
@@ -152,7 +162,7 @@ export const ui = {
         },
         panel: { gap: '10px', padding: '10px' },
         label: { fontSize: '14px' },
-        button: { padding: '5px 10px', cursor: 'pointer' },
+        button: { padding: '5px 10px', cursor: 'pointer', border: '0', borderRadius: '5px', flex: '1'},
         slider: { width: '100%' },
         checkbox: { cursor: 'pointer' },
         textarea: { minHeight: '100px', fontFamily: 'monospace' },
@@ -191,30 +201,26 @@ export const ui = {
         };
 
         const resetStyle = () => {
+            const clearStyles = (styleObj) => {
+                if (!styleObj) return;
+                for (const key of Object.keys(styleObj)) {
+                    instance.el.style[key] = ''; 
+                }
+            };
+        
+            clearStyles(mergedProps.active);
+            clearStyles(mergedProps.hover);
+        
             Object.assign(instance.el.style, baseStyle);
-            // Ensure position() transform isn't lost
-            if (!baseStyle.transform) {
+        
+            if (!instanceStyle.transform) {
                 instance.el.style.transform = instance._baseTransform || 'none';
             }
+        
             if (instance._isHovered) {
                 applyState(mergedProps.hover);
             }
         };
-
-        // --- UNIVERSAL SYNC ---
-        // This ensures instance.value updates when you move a slider/checkbox
-        if (['INPUT', 'TEXTAREA'].includes(instance.el.tagName)) {
-            const syncFromDOM = () => {
-                instance.value = (instance.el.type === 'checkbox') ? instance.el.checked : instance.el.value;
-            };
-            instance.el.addEventListener('input', syncFromDOM);
-            instance.el.addEventListener('change', syncFromDOM);
-        }
-        if (instance.el.tagName === 'BUTTON') {
-            instance.el.addEventListener('click', (e) => {
-                instance.onevent('click', e);
-            });
-        }
 
         // --- MOUSE STATES ---
         instance.el.addEventListener('mouseenter', () => { 
@@ -250,6 +256,23 @@ export const ui = {
                 instance.el.setAttribute(key, value);
             }
         }
+
+        const events = ['click', 'input', 'change', 'mousedown', 'mouseup', 'mouseenter', 'mouseleave'];
+
+        events.forEach(type => {
+            instance.el.addEventListener(type, (e) => {
+                if (type === 'input' || type === 'change') {
+                    instance.value = (instance.el.type === 'checkbox') ? instance.el.checked : instance.el.value;
+                }
+
+                if (type === 'mouseenter') { instance._isHovered = true; applyState(mergedProps.hover); }
+                if (type === 'mouseleave') { instance._isHovered = false; resetStyle(); }
+                if (type === 'mousedown') { applyState(mergedProps.active); }
+                if (type === 'mouseup') { resetStyle(); if (instance._isHovered) applyState(mergedProps.hover); }
+
+                instance.onevent(type, e);
+            });
+        });
 
         // --- MOUNT CHILDREN ---
         for (const child of children) {
