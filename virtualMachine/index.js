@@ -10,176 +10,96 @@ let timerId = null;
 let isRunning = false;
 let isTurbo = false; 
 
-const OPCODES = {
-    LOAD:  0x10,
-    LOADM: 0x11,
-    STORE: 0x12,
+const INSTRUCTIONS = {
+    LOAD:   { opcode: 0x10, args: ["reg", "val32"] }, 
+    LOADM:  { opcode: 0x11, args: ["reg", "val32"] },
+    STORE:  { opcode: 0x12, args: ["reg", "val32"] },
+    MOV:    { opcode: 0x13, args: ["reg", "reg"] },
+    LOADI:  { opcode: 0x14, args: ["reg", "reg"] },
+    STOREI: { opcode: 0x15, args: ["reg", "reg"] },
 
-    ADD: 0x20,
-    SUB: 0x21,
-    MUL: 0x22,
-    DIV: 0x23,
-    AND: 0x24,
-    OR:  0x25,
-    XOR: 0x26,
-    NOT: 0x27,
+    ADD: { opcode: 0x20, args: ["reg", "reg"] },
+    SUB: { opcode: 0x21, args: ["reg", "reg"] },
+    MUL: { opcode: 0x22, args: ["reg", "reg"] },
+    DIV: { opcode: 0x23, args: ["reg", "reg"] },
+    AND: { opcode: 0x24, args: ["reg", "reg"] },
+    OR:  { opcode: 0x25, args: ["reg", "reg"] },
+    XOR: { opcode: 0x26, args: ["reg", "reg"] },
+    CMP: { opcode: 0x33, args: ["reg", "reg"] },
+    SHL: { opcode: 0x2A, args: ["reg", "reg"] },
+    SHR: { opcode: 0x2B, args: ["reg", "reg"] },
 
-    JMP: 0x30,
-    JZ:  0x31,
-    JNZ: 0x32,
-    CMP: 0x33,
+    NOT: { opcode: 0x27, args: ["reg"] },
+    INC: { opcode: 0x28, args: ["reg"] },
+    DEC: { opcode: 0x29, args: ["reg"] },
 
-    PUSH: 0x70,
-    POP:  0x71,
-    CALL: 0x72,
-    RET:  0x73,
+    JMP:  { opcode: 0x30, args: ["val32"] },
+    JZ:   { opcode: 0x31, args: ["val32"] },
+    JNZ:  { opcode: 0x32, args: ["val32"] },
+    CALL: { opcode: 0x72, args: ["val32"] },
 
-    MOV: 0x13,
-
-    PRINT: 0x40,
-    HALT:  0xFF
+    PUSH:  { opcode: 0x70, args: ["reg"] },
+    POP:   { opcode: 0x71, args: ["reg"] },
+    PRINT: { opcode: 0x40, args: ["reg"] },
+    RET:   { opcode: 0x73, args: [] },
+    HALT:  { opcode: 0xFF, args: [] }
 };
+
 
 const toHex = (val, size = 8) => '0x' + val.toString(16).toUpperCase().padStart(size, '0');
 
 function assemble(source) {
     const lines = source.trim().split("\n");
-
     const labels = {};
     const output = [];
 
-    // Collect labels
-    let pc = 0; // program counter for assembly
+    const reg = (n) => parseInt(n.substring(1));
+    const val = (x) => {
+        if (labels[x] !== undefined) return labels[x];
+        const s = x.toString().toLowerCase();
+        if (s.startsWith("0x")) return parseInt(s.slice(2), 16);
+        if (s.startsWith("$")) return parseInt(s.slice(1), 16);
+        return parseInt(x);
+    };
 
+    // Helper to calculate byte size of an instruction
+    const getInstrSize = (instr) => {
+        return 1 + instr.args.reduce((acc, arg) => acc + (arg === "reg" ? 1 : 4), 0);
+    };
+
+    // PASS 1: Labels
+    let pc = 0;
     for (let raw of lines) {
         let line = raw.trim();
         if (line === "" || line.startsWith(";")) continue;
-
-        // Label definition
         if (line.endsWith(":")) {
-            const name = line.slice(0, -1);
-            labels[name] = pc;
+            labels[line.slice(0, -1)] = pc;
             continue;
         }
-
-        // Instruction → increase pc by instruction size
-        const parts = line.split(/[\s,]+/);
-        const instr = parts[0].toUpperCase();
-
-        if (instr === "LOAD") pc += 6;
-        else if (["LOADM", "STORE"].includes(instr)) pc += 4;
-        else if (instr === "MOV") pc += 3;
-        else if (["ADD","SUB","MUL","DIV","AND","OR","XOR","CMP"].includes(instr)) pc += 3;
-        else if (["NOT","PRINT"].includes(instr)) pc += 2;
-        else if (["JMP","JZ","JNZ"].includes(instr)) pc += 2;
-        else if (["PUSH","POP","CALL"].includes(instr)) pc += 2;
-        else if (instr === "RET") pc += 1;
-        else if (instr === "HALT") pc += 1;
-        else throw new Error("Unknown instruction: " + instr);
+        const mnemonic = line.split(/[\s,]+/)[0].toUpperCase();
+        pc += getInstrSize(INSTRUCTIONS[mnemonic]);
     }
 
-    console.log("LABELS:", labels);
-
-    // Emit bytes
+    // PASS 2: Emission
     for (let raw of lines) {
         let line = raw.trim();
-        if (line === "" || line.startsWith(";")) continue;
-
-        // Skip labels
-        if (line.endsWith(":")) continue;
+        if (line === "" || line.startsWith(";") || line.endsWith(":")) continue;
 
         const parts = line.split(/[\s,]+/);
-        const instr = parts[0].toUpperCase();
+        const mnemonic = parts[0].toUpperCase();
+        const instr = INSTRUCTIONS[mnemonic];
 
-        function reg(n) { return parseInt(n.substring(1)); }
-        function val(x) {
-            if (labels[x] !== undefined) return labels[x];
-            
-            const s = x.toString().toLowerCase();
-            
-            // Handle 0x prefix (e.g., 0xFF)
-            if (s.startsWith("0x")) return parseInt(s.slice(2), 16);
-            
-            // Handle $ prefix (e.g., $FF)
-            if (s.startsWith("$")) return parseInt(s.slice(1), 16);
-            
-            // Handle h suffix (e.g., FFh)
-            if (s.endsWith("h")) return parseInt(s.slice(0, -1), 16);
-            
-            return parseInt(x);
-        }        
+        output.push(instr.opcode);
 
-        switch (instr) {
-            case "LOAD":
-                const r = reg(parts[1]);
-                const v = val(parts[2]);
-                // Push Opcode and Register
-                output.push(OPCODES.LOAD, r);
-                // Push 32-bit value as 4 individual bytes (Little-Endian)
-                output.push(v & 0xFF);
-                output.push((v >> 8) & 0xFF);
-                output.push((v >> 16) & 0xFF);
-                output.push((v >> 24) & 0xFF);
-                break;
-
-            case "LOADM":
-            case "STORE": {
-                const r = reg(parts[1]);
-                const addr = val(parts[2]);
-                output.push(OPCODES[instr], r);
-                // Emit 16-bit address (Little-Endian)
-                output.push(addr & 0xFF);
-                output.push((addr >> 8) & 0xFF);
-                break;
-            }
-
-            case "ADD":
-            case "SUB":
-            case "MUL":
-            case "DIV":
-            case "AND":
-            case "OR":
-            case "XOR":
-            case "CMP":
-                output.push(OPCODES[instr], reg(parts[1]), reg(parts[2]));
-                break;
-
-            case "NOT":
-            case "PRINT":
-                output.push(OPCODES[instr], reg(parts[1]));
-                break;
-
-            case "JMP":
-            case "JZ":
-            case "JNZ":
-            case "CALL": {
-                const v = val(parts[1]);
-                output.push(OPCODES[instr]);
-                // Push 32-bit address (Little-Endian)
+        instr.args.forEach((argType, i) => {
+            const param = parts[i + 1];
+            if (argType === "reg") {
+                output.push(reg(param));
+            } else if (argType === "val32") {
+                const v = val(param);
                 output.push(v & 0xFF, (v >> 8) & 0xFF, (v >> 16) & 0xFF, (v >> 24) & 0xFF);
-                break;
             }
-
-            case "PUSH":
-            case "POP":
-                output.push(OPCODES[instr], reg(parts[1]));
-                break;
-            
-            case "RET":
-                output.push(OPCODES.RET);
-                break;
-
-            case "MOV":
-                output.push(OPCODES.MOV, reg(parts[1]), reg(parts[2]));
-                break;
-
-            case "HALT":
-                output.push(OPCODES.HALT);
-                break;
-
-            default:
-                throw new Error("Unknown instruction: " + instr);
-        }
+        });
     }
 
     return output;
@@ -207,214 +127,191 @@ for (let i = 0; i < program.length; i++) {
 }
 
 function clock() {
-    const opCode = memory[pc];
-    pc++;
+    const opCode = memory[pc++];
 
-    console.debug("PC: " + pc);
+    const read32 = () => {
+        const val = (memory[pc] | (memory[pc+1] << 8) | (memory[pc+2] << 16) | (memory[pc+3] << 24)) >>> 0;
+        pc += 4;
+        return val;
+    };
+
+    const memRead32 = (addr) => (memory[addr] | (memory[addr+1] << 8) | (memory[addr+2] << 16) | (memory[addr+3] << 24)) >>> 0;
+    
+    const memWrite32 = (addr, val) => {
+        memory[addr]     = val & 0xFF;
+        memory[addr + 1] = (val >> 8) & 0xFF;
+        memory[addr + 2] = (val >> 16) & 0xFF;
+        memory[addr + 3] = (val >> 24) & 0xFF;
+    };
 
     switch (opCode) {
-        case 0x00:
+        case 0x00: break;
+
+        case INSTRUCTIONS.LOAD.opcode:
+            registers[memory[pc++]] = read32();
             break;
 
-        case OPCODES.LOAD: { // LOAD r, immediate32
+        case INSTRUCTIONS.LOADM.opcode: {
             const r = memory[pc++];
-            // Read 4 bytes and shift them back into a single 32-bit number
-            const b1 = memory[pc++];
-            const b2 = memory[pc++];
-            const b3 = memory[pc++];
-            const b4 = memory[pc++];
-            
-            // Combine bytes (Little-Endian)
-            // Using >>> 0 ensures JavaScript treats the result as an Unsigned 32-bit integer
-            registers[r] = (b1 | (b2 << 8) | (b3 << 16) | (b4 << 24)) >>> 0;
+            const addr = read32();
+            registers[r] = memRead32(addr);
             break;
         }
 
-        case OPCODES.LOADM: { // Load 32-bit Word from RAM
+        case INSTRUCTIONS.STORE.opcode: {
             const r = memory[pc++];
-            const low = memory[pc++];
-            const high = memory[pc++];
-            const addr = (low | (high << 8)); // Reconstruct 16-bit address
-        
-            // Reconstruct 32-bit value from 4 memory bytes (Little-Endian)
-            registers[r] = (
-                memory[addr] | 
-                (memory[addr + 1] << 8) | 
-                (memory[addr + 2] << 16) | 
-                (memory[addr + 3] << 24)
-            ) >>> 0;
+            const addr = read32();
+            memWrite32(addr, registers[r]);
             break;
         }
 
-        case OPCODES.STORE: { // Store 32-bit Word to RAM
-            const r = memory[pc++];
-            const low = memory[pc++];
-            const high = memory[pc++];
-            const addr = (low | (high << 8));
-            const value = registers[r];
-        
-            // Deconstruct 32-bit value into 4 memory bytes
-            memory[addr]     = value & 0xFF;
-            memory[addr + 1] = (value >> 8) & 0xFF;
-            memory[addr + 2] = (value >> 16) & 0xFF;
-            memory[addr + 3] = (value >> 24) & 0xFF;
-            break;
-        }
-
-        case OPCODES.ADD: { // ADD rA, rB
-            const rA = memory[pc++];
-            const rB = memory[pc++];
-            registers[rA] = registers[rA] + registers[rB];
-            break;
-        }
-
-        case OPCODES.SUB: { // SUB rA, rB
-            const rA = memory[pc++];
-            const rB = memory[pc++];
-            registers[rA] = registers[rA] - registers[rB];
-            break;
-        }
-
-        case OPCODES.MUL: { // MUL rA, rB
-            const rA = memory[pc++];
-            const rB = memory[pc++];
-            registers[rA] = registers[rA] * registers[rB];
-            break;
-        }
-
-        case OPCODES.DIV: { // DIV rA, rB
-            const rA = memory[pc++];
-            const rB = memory[pc++];
-            registers[rA] = Math.floor(registers[rA] / registers[rB]);
-            break;
-        }
-
-        case OPCODES.AND: { // AND rA, rB
-            const rA = memory[pc++];
-            const rB = memory[pc++];
-            registers[rA] = registers[rA] & registers[rB]
-            break;
-        }
-
-        case OPCODES.OR: { // OR rA, rB
-            const rA = memory[pc++];
-            const rB = memory[pc++];
-            registers[rA] = registers[rA] | registers[rB];
-            break;
-        }
-
-        case OPCODES.XOR: { // XOR rA, rB
-            const rA = memory[pc++];
-            const rB = memory[pc++];
-            registers[rA] = registers[rA] ^ registers[rB];
-            break;
-        }
-
-        case OPCODES.NOT: {
-            const r = memory[pc++];
-            registers[r] = (~registers[r]) >>> 0; 
-            break;
-        }        
-
-        case OPCODES.JMP: {
-            const b1 = memory[pc++];
-            const b2 = memory[pc++];
-            const b3 = memory[pc++];
-            const b4 = memory[pc++];
-            pc = (b1 | (b2 << 8) | (b3 << 16) | (b4 << 24)) >>> 0;
-            break;
-        }        
-
-        case OPCODES.JZ: { // JZ addr
-            const addr = memory[pc++];
-            if (ZF === 1) pc = addr;
-            break;
-        }
-        
-        case OPCODES.JNZ: { // JNZ addr
-            const addr = memory[pc++];
-            if (ZF === 0) pc = addr;
-            break;
-        }        
-
-        case OPCODES.CMP: { // CMP rA, rB
-            const rA = memory[pc++];
-            const rB = memory[pc++];
-            ZF = (registers[rA] === registers[rB]) ? 1 : 0;
-            break;
-        }
-        
-        case OPCODES.PRINT: { // PRINT r
-            const r = memory[pc++];
-            const value = registers[r];
-
-            console.log(registers[r]);
-            // Append to the UI Textarea
-            terminal.value += value + '\n';
-            
-            // Scroll to the bottom
-            terminal.el.scrollTop = terminal.el.scrollHeight;
-            break;
-        }
-
-        case OPCODES.PUSH: {
-            const r = memory[pc++];      // which register to push
-            registers[SP]--;             // move stack pointer down
-            memory[registers[SP]] = registers[r];  // store value
-            break;
-        }
-        
-        case OPCODES.POP: {
-            const r = memory[pc++]; // which register to pop into
-            registers[r] = memory[registers[SP]];
-            registers[SP]++; // move stack pointer up
-            break;
-        }
-
-        case OPCODES.CALL: {
-            // Read 32-bit target
-            const b1 = memory[pc++]; const b2 = memory[pc++];
-            const b3 = memory[pc++]; const b4 = memory[pc++];
-            const target = (b1 | (b2 << 8) | (b3 << 16) | (b4 << 24)) >>> 0;
-        
-            // Push 32-bit Return Address (current PC)
-            registers[SP] -= 4;
-            const addr = registers[SP];
-            memory[addr]     = pc & 0xFF;
-            memory[addr + 1] = (pc >> 8) & 0xFF;
-            memory[addr + 2] = (pc >> 16) & 0xFF;
-            memory[addr + 3] = (pc >> 24) & 0xFF;
-        
-            pc = target;
-            break;
-        }
-
-        case OPCODES.RET: {
-            const addr = registers[SP];
-            // Pop 32-bit PC
-            pc = (memory[addr] | (memory[addr+1] << 8) | (memory[addr+2] << 16) | (memory[addr+3] << 24)) >>> 0;
-            registers[SP] += 4;
-            break;
-        }
-
-        case OPCODES.MOV: { // MOV rDest, rSrc
+        case INSTRUCTIONS.MOV.opcode: {
             const rDest = memory[pc++];
             const rSrc = memory[pc++];
             registers[rDest] = registers[rSrc];
             break;
-        }        
-        
-        case OPCODES.HALT: {
-            stopMachine();
-            terminal.value += '--- System Halted ---\n';
-            console.log("HALT");
+        }
+
+        case INSTRUCTIONS.LOADI.opcode: {
+            const rDest = memory[pc++];
+            const rPtr = memory[pc++];
+            registers[rDest] = memRead32(registers[rPtr]);
             break;
         }
 
-        default: {
-            console.log("Unknown opcode:", opCode);
+        case INSTRUCTIONS.STOREI.opcode: {
+            const rPtr = memory[pc++];
+            const rSrc = memory[pc++];
+            memWrite32(registers[rPtr], registers[rSrc]);
             break;
         }
+
+        case INSTRUCTIONS.ADD.opcode: {
+            const rA = memory[pc++]; const rB = memory[pc++];
+            registers[rA] = (registers[rA] + registers[rB]) >>> 0;
+            break;
+        }
+
+        case INSTRUCTIONS.SUB.opcode: {
+            const rA = memory[pc++]; const rB = memory[pc++];
+            registers[rA] = (registers[rA] - registers[rB]) >>> 0;
+            break;
+        }
+
+        case INSTRUCTIONS.MUL.opcode: {
+            const rA = memory[pc++]; const rB = memory[pc++];
+            registers[rA] = (registers[rA] * registers[rB]) >>> 0;
+            break;
+        }
+
+        case INSTRUCTIONS.DIV.opcode: {
+            const rA = memory[pc++]; const rB = memory[pc++];
+            registers[rA] = Math.floor(registers[rA] / registers[rB]) >>> 0;
+            break;
+        }
+
+        case INSTRUCTIONS.INC.opcode: registers[memory[pc++]]++; break;
+        case INSTRUCTIONS.DEC: registers[memory[pc++]]--; break;
+
+        case INSTRUCTIONS.AND.opcode: {
+            const rA = memory[pc++]; const rB = memory[pc++];
+            registers[rA] = (registers[rA] & registers[rB]) >>> 0;
+            break;
+        }
+
+        case INSTRUCTIONS.OR.opcode: {
+            const rA = memory[pc++]; const rB = memory[pc++];
+            registers[rA] = (registers[rA] | registers[rB]) >>> 0;
+            break;
+        }
+
+        case INSTRUCTIONS.XOR.opcode: {
+            const rA = memory[pc++]; const rB = memory[pc++];
+            registers[rA] = (registers[rA] ^ registers[rB]) >>> 0;
+            break;
+        }
+
+        case INSTRUCTIONS.NOT.opcode: {
+            const r = memory[pc++];
+            registers[r] = (~registers[r]) >>> 0;
+            break;
+        }
+
+        case INSTRUCTIONS.SHL.opcode: {
+            const rA = memory[pc++]; const rB = memory[pc++];
+            registers[rA] = (registers[rA] << registers[rB]) >>> 0;
+            break;
+        }
+
+        case INSTRUCTIONS.SHR.opcode: {
+            const rA = memory[pc++]; const rB = memory[pc++];
+            registers[rA] = (registers[rA] >>> registers[rB]);
+            break;
+        }
+
+        case INSTRUCTIONS.CMP.opcode: {
+            const rA = memory[pc++]; const rB = memory[pc++];
+            ZF = (registers[rA] === registers[rB]) ? 1 : 0;
+            break;
+        }
+
+        case INSTRUCTIONS.JMP.opcode: pc = read32(); break;
+
+        case INSTRUCTIONS.JZ.opcode: {
+            const addr = read32();
+            if (ZF === 1) pc = addr;
+            break;
+        }
+
+        case INSTRUCTIONS.JNZ.opcode: {
+            const addr = read32();
+            if (ZF === 0) pc = addr;
+            break;
+        }
+
+        case INSTRUCTIONS.PUSH.opcode: {
+            const r = memory[pc++];
+            registers[SP] -= 4;
+            memWrite32(registers[SP], registers[r]);
+            break;
+        }
+
+        case INSTRUCTIONS.POP.opcode: {
+            const r = memory[pc++];
+            registers[r] = memRead32(registers[SP]);
+            registers[SP] += 4;
+            break;
+        }
+
+        case INSTRUCTIONS.CALL.opcode: {
+            const target = read32();
+            registers[SP] -= 4;
+            memWrite32(registers[SP], pc);
+            pc = target;
+            break;
+        }
+        
+        case INSTRUCTIONS.RET.opcode: {
+            pc = memRead32(registers[SP]);
+            registers[SP] += 4;
+            break;
+        }
+
+        case INSTRUCTIONS.PRINT.opcode: {
+            const val = registers[memory[pc++]];
+            terminal.value += val + '\n';
+            terminal.el.scrollTop = terminal.el.scrollHeight;
+            break;
+        }
+
+        case INSTRUCTIONS.HALT.opcode:
+            stopMachine();
+            terminal.value += '--- System Halted ---\n';
+            break;
+
+        default:
+            console.log("Unknown opcode:", opCode);
+            break;
     }
 }
 
