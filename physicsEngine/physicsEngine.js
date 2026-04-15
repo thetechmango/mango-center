@@ -1869,6 +1869,7 @@ function loadGameState(file) {
     panX = data.settings.panX;
     panY = data.settings.panY;
     currentTool = data.settings.currentTool;
+    document.getElementById('fileInput').value = '';
   };
   reader.readAsText(file);
 }

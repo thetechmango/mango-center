@@ -204,7 +204,7 @@
 		<button onclick="deleteSelected()">🗑️ Delete</button>
 		<button onclick="showProperties()">⚙️ Properties</button>
 
-		<input type="file" onchange="loadGameState(this.files[0])" style="
+		<input type="file" id="fileInput" onchange="loadGameState(this.files[0]);" style="
 		width: calc(100% - 10px);
 		min-height: 40px;
 		background: #444;
