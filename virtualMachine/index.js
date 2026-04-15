@@ -24,36 +24,35 @@ const INSTRUCTIONS = {
     LOADIB: { opcode: 0x16, args: ["reg", "reg"] },   // LOADI but load only one byte
     STOREI: { opcode: 0x15, args: ["reg", "reg"] },   // Store to a memory address in a register
 
-    ADD: { opcode: 0x20, args: ["reg", "reg"] },
-    SUB: { opcode: 0x21, args: ["reg", "reg"] },
-    MUL: { opcode: 0x22, args: ["reg", "reg"] },
+    ADD: { opcode: 0x20, args: ["reg", "reg"] }, // Adds reg2 to reg1
+    SUB: { opcode: 0x21, args: ["reg", "reg"] }, // Same as ADD but subtraction
+    MUL: { opcode: 0x22, args: ["reg", "reg"] }, // ...
     DIV: { opcode: 0x23, args: ["reg", "reg"] },
-    AND: { opcode: 0x24, args: ["reg", "reg"] },
-    OR:  { opcode: 0x25, args: ["reg", "reg"] },
+    AND: { opcode: 0x24, args: ["reg", "reg"] }, // reg1 = reg1 AND (bitwise) reg2
+    OR:  { opcode: 0x25, args: ["reg", "reg"] }, // ...
     XOR: { opcode: 0x26, args: ["reg", "reg"] },
-    CMP: { opcode: 0x33, args: ["reg", "reg"] },
-    SHL: { opcode: 0x2A, args: ["reg", "reg"] },
-    SHR: { opcode: 0x2B, args: ["reg", "reg"] },
-
     NOT: { opcode: 0x27, args: ["reg"] },
-    INC: { opcode: 0x28, args: ["reg"] },
-    DEC: { opcode: 0x29, args: ["reg"] },
+    INC: { opcode: 0x28, args: ["reg"] },        // Increments reg by 1
+    DEC: { opcode: 0x29, args: ["reg"] },        // Decrements reg by 1
+    SHL: { opcode: 0x2A, args: ["reg", "reg"] }, // Shifts bits of reg1 to the left by reg2 amount
+    SHR: { opcode: 0x2B, args: ["reg", "reg"] }, // Same but to the right
 
-    JMP: { opcode: 0x30, args: ["val32"] },
-    JZ:  { opcode: 0x31, args: ["val32"] },
-    JNZ: { opcode: 0x32, args: ["val32"] },
-    JG:  { opcode: 0x34, args: ["val32"] },
-    JL:  { opcode: 0x35, args: ["val32"] },
-    JGE: { opcode: 0x36, args: ["val32"] },
-    JLE: { opcode: 0x37, args: ["val32"] },
+    JMP: { opcode: 0x30, args: ["val32"] },      // Jump to a memory address
+    JZ:  { opcode: 0x31, args: ["val32"] },      // Jump to a memory address if the zero flag is true
+    JNZ: { opcode: 0x32, args: ["val32"] },      // Same but only if zero flag is false
+    CMP: { opcode: 0x33, args: ["reg", "reg"] }, // Sets the zero flag (ZF), sign flag (SF), and overflow flag (OF). Use this before the comparison jumps
+    JG:  { opcode: 0x34, args: ["val32"] },      // Jump if CMP reg1 was greater than reg2
+    JL:  { opcode: 0x35, args: ["val32"] },      // Jump if CPM reg1 was less than reg2
+    JGE: { opcode: 0x36, args: ["val32"] },      // Same but greater than or equal to
+    JLE: { opcode: 0x37, args: ["val32"] },      // Same but less than or equal to
 
-    PUSH:  { opcode: 0x70, args: ["reg"] },
-    POP:   { opcode: 0x71, args: ["reg"] },
-    CALL: { opcode: 0x72, args: ["val32"] },
-    RET:   { opcode: 0x73, args: [] },
+    PUSH:  { opcode: 0x70, args: ["reg"] },  // Decrement SP by 4, then write reg value to [SP]
+    POP:   { opcode: 0x71, args: ["reg"] },  // Read value at [SP] into reg, then increment SP by 4
+    CALL: { opcode: 0x72, args: ["val32"] }, // PUSH current Program Counter (PC), then JMP to val32 in memory
+    RET:   { opcode: 0x73, args: [] },       // POP value from stack into PC (returns to after the CALL)
 
-    PRINT: { opcode: 0x40, args: ["reg"] },
-    HALT:  { opcode: 0xFF, args: [] }
+    PRINT: { opcode: 0x40, args: ["reg"] }, // Prints the value of reg to the terminal in decimal
+    HALT:  { opcode: 0xFF, args: [] }       // Halts the program until the user resumes
 };
 
 
@@ -275,8 +274,6 @@ function clock() {
             ZF = (res === 0) ? 1 : 0;
             SF = (res < 0) ? 1 : 0;
             OF = ((rA ^ res) & (rB ^ rA) & 0x80000000) ? 1 : 0;
-
-            console.log(`CMP: a=${rA}, b=${rB}, res=${res}, ZF=${ZF}, SF=${SF}, OF=${OF}`);
             break;
         }        
 
