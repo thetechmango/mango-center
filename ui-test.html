@@ -16,15 +16,15 @@
             transition: 'transform 0.05s ease-out, background 0.2s',
             accentColor: '#46e'
         })
-        ui.defaults.panel = {
+        Object.assign(ui.defaults.panel, {
             background: '#f4f4f4',
             borderRadius: '14px',
             border: '2px solid #ccc',
             gap: '10px',
             padding: '10px'
-        };
-        ui.defaults.button = {
-            background: '#46e',
+        });
+        Object.assign(ui.defaults.button, {
+            background: ui.defaults.global.accentColor,
             color: 'white',
             hover: {
                 background: '#24c', transform: 'scale(1.05)'
@@ -35,7 +35,11 @@
             border: 'none',
             borderRadius: '4px',
             cursor: 'pointer'
-        };
+        });
+
+        Object.assign(ui.defaults.divider, {
+            background: ui.defaults.global.accentColor
+        });
 
         // 2. Build a test interface
         const myApp = 
@@ -49,13 +53,27 @@
 
             ui.slider({ value: 50, min: 0, max: 100 }),
 
-            ui.row({ style: { justifyContent: 'spaceEvenly'} }, [
-                ui.button({ text: '1', style: { width: '50px', height: '50px' } }),
-                ui.button({ text: '2', style: { width: '50px', height: '50px' } }),
-                ui.button({ text: '3', style: { width: '50px', height: '50px' } }),
-                ui.button({ text: '4', style: { width: '50px', height: '50px' } }),
-                ui.button({ text: '5', style: { width: '50px', height: '50px' } }),
-                ui.button({ text: '6', style: { width: '50px', height: '50px' } })
+            ui.foldout({ text: 'Number Buttons'}, [
+                ui.row({ style: { justifyContent: 'spaceEvenly' } }, [
+                    ui.button({ text: '1', style: { width: '50px', height: '50px' } }),
+                    ui.button({ text: '2', style: { width: '50px', height: '50px' } }),
+                    ui.button({ text: '3', style: { width: '50px', height: '50px' } }),
+                    ui.button({ text: '4', style: { width: '50px', height: '50px' } }),
+                    ui.button({ text: '5', style: { width: '50px', height: '50px' } }),
+                    ui.button({ text: '6', style: { width: '50px', height: '50px' } })
+                ])
+            ]),
+
+            ui.divider(),
+
+            ui.foldout({ text: '1' }, [
+                ui.foldout({ text: '2' }, [
+                    ui.foldout({ text: '3' }, [
+                        ui.foldout({ text: '4' }, [
+
+                        ])
+                    ])
+                ])
             ]),
 
             ui.button({ text: 'Save Configuration', onclick: () => alert('Saved!') })
@@ -67,7 +85,7 @@
         // 4. Mount it to the screen
         ui.mount(myApp, document.getElementById('app'));
 
-        for (const button of myApp.children[3].children) {
+        for (const button of myApp.children[3].children[0].children) {
             button.onevent = (name, e) => {
                 if (name === "click") console.log(button.el.innerText);
             }

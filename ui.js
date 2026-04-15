@@ -153,6 +153,49 @@ class Divider extends UIElement {
     }
 }
 
+class Foldout extends Panel {
+    constructor(title = "Foldout") {
+        super();
+        this._expanded = true;
+        this._title = title;
+
+        this.header = new Label();
+        // Move the internal setup here
+        Object.assign(this.header.el.style, ui.defaults.foldout_header);
+        this.header.el.style.display = 'flex';
+        this.header.el.style.alignItems = 'center';
+
+        this.label = document.createElement('span');
+        this.label.style.flex = "1";
+        this.arrow = document.createElement('span');
+
+        this.header.el.appendChild(this.label);
+        this.header.el.appendChild(this.arrow);
+        this.header.el.onclick = (e) => { e.stopPropagation(); this.expanded = !this.expanded; };
+
+        this.el.appendChild(this.header.el);
+        this.text = title;
+    }
+
+    get text() { return this._title; }
+    set text(val) {
+        this._title = val;
+        this.label.innerText = val;
+        this.arrow.innerText = "▼\uFE0E";
+    }
+
+    get expanded() { return this._expanded; }
+    set expanded(val) {
+        this._expanded = val;
+        this.arrow.style.transform = val ? 'rotate(0deg)' : 'rotate(-90deg)';
+        Array.from(this.el.children).forEach(child => {
+            if (child !== this.header.el) child.style.display = val ? 'flex' : 'none';
+        });
+        this.onevent("expand", val);
+    }
+}
+
+
 export const ui = {
     defaults: {
         global: {
@@ -166,7 +209,17 @@ export const ui = {
         slider: { width: '100%' },
         checkbox: { cursor: 'pointer' },
         textarea: { minHeight: '100px', fontFamily: 'monospace' },
-        divider: { background: '#fff' }
+        divider: { background: '#fff' },
+        foldout: { 
+            padding: '0px', 
+            gap: '5px'
+        },
+        foldout_header: {
+            cursor: 'pointer',
+            padding: '5px',
+            width: '100%',
+            userSelect: 'none'
+        }
     },
 
     _create(instance, props = {}, children = []) {
@@ -241,19 +294,23 @@ export const ui = {
 
         // --- PROPS LOOP ---
         for (const [key, value] of Object.entries(props)) {
+            if (key !== "value" && key !== "text" && !key.startsWith("on") && 
+                key !== "style" && key !== "hover" && key !== "active") {
+                instance.el.setAttribute(key, value);
+            }
+        }
+        
+        // Properties and events
+        for (const [key, value] of Object.entries(props)) {
             if (key.startsWith("on")) {
                 const eventName = key.slice(2).toLowerCase();
-                // Store the specific handler
                 instance[`handle_${eventName}`] = value;
             } 
             else if (key === "value") {
                 instance.value = value;
             }
             else if (key === "text") {
-                instance.el.innerText = value;
-            }
-            else if (key !== "style" && key !== "hover" && key !== "active") {
-                instance.el.setAttribute(key, value);
+                instance.text = value;
             }
         }
 
@@ -332,6 +389,12 @@ export const ui = {
         instance.el.style.margin = isRow ? `0 ${margin}` : `${margin} 0`;
 
         return this._create(instance, props);
+    },
+
+    foldout(props, children) {
+        const instance = this._create(new Foldout(props.text), props, children);
+        instance.expanded = props.expanded !== undefined ? props.expanded : false;
+        return instance;
     },
 
     el(tag, props, children) {
