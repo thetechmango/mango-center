@@ -186,46 +186,16 @@ function assemble(source) {
 }
 
 const initialProgramText = `
-; R0: Number being tested (N)
-; R1: Current Divisor (D)
-; R2: Temporary storage / Constant
-; R3: Upper limit (0xFFFFFFFF)
+; Example Assembly Program
+LOAD R0, 0x00000001
+LOAD R1, 0x00000002
+LOAD R2, 0x00000000
 
-LOAD R0, 0x00000003       ; Start testing at 3
-LOAD R3, 0xFFFFFFFF   ; The 32-bit testing limit
-
-MAIN_LOOP:
-    ; --- Limit Check ---
-    CMP R0, R3      ; Compare N to 0xFF
-    JZ FINISHED     ; If exactly the limit, stop
-    
-    LOAD R1, 0x00000002 ; Reset divisor to 2
-    
-CHECK_PRIME:
-    CMP R1, R0
-    JZ IS_PRIME
-
-    ; --- Modulo Check ---
-    MOV R2, R0
-    DIV R2, R1
-    MUL R2, R1
-    
-    CMP R2, R0
-    JZ NOT_PRIME
-
-    LOAD R2, 0x00000001
-    ADD R1, R2
-    JMP CHECK_PRIME
-
-IS_PRIME:
+LOOP:
     PRINT R0
-
-NOT_PRIME:
-    LOAD R2, 0x00000002
-    ADD R0, R2
-    JMP MAIN_LOOP
-
-FINISHED:
+    MUL R0, R1
+    CMP R0, R2
+    JNZ LOOP
     HALT
 `;
 
@@ -583,9 +553,13 @@ const programEditor = ui.textarea({
         fontFamily: 'monospace',
         color: '#eee',
         backgroundColor: '#1e1e1e',
-        wrap: 'off',
         whiteSpace: 'pre'
-    } 
+    },
+    wrap: 'off',
+    autocorrect: 'off',
+    autocapitalize: 'off',
+    spellcheck: 'false',
+    autocomete: 'off'
 });
 
 const loadButton = ui.button({
