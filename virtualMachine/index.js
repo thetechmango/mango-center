@@ -1,9 +1,9 @@
 import { ui } from '../ui.js';
 
 const memory = new Uint8Array(65536);
-const registers = new Uint8Array(8);
-const SP = 7; // last register is stack pointer
-registers[SP] = 0xFF; // stack starts at top of RAM
+const registers = new Uint32Array(16);
+const SP = 15; // last register is stack pointer
+registers[SP] = 0xFFFF; // Start at the end of 64k RAM
 let pc = 0; // Program counter
 let ZF = 0; // Zero flag
 let timerId = null;
@@ -40,6 +40,7 @@ const OPCODES = {
     HALT:  0xFF
 };
 
+const toHex = (val, size = 8) => '0x' + val.toString(16).toUpperCase().padStart(size, '0');
 
 function assemble(source) {
     const lines = source.trim().split("\n");
@@ -65,9 +66,8 @@ function assemble(source) {
         const parts = line.split(/[\s,]+/);
         const instr = parts[0].toUpperCase();
 
-        if (instr === "LOAD") pc += 3;
-        else if (instr === "LOADM") pc += 3;
-        else if (instr === "STORE") pc += 3;
+        if (instr === "LOAD") pc += 6;
+        else if (["LOADM", "STORE"].includes(instr)) pc += 4;
         else if (instr === "MOV") pc += 3;
         else if (["ADD","SUB","MUL","DIV","AND","OR","XOR","CMP"].includes(instr)) pc += 3;
         else if (["NOT","PRINT"].includes(instr)) pc += 2;
@@ -92,20 +92,46 @@ function assemble(source) {
         const instr = parts[0].toUpperCase();
 
         function reg(n) { return parseInt(n.substring(1)); }
-        function val(x) { return isNaN(x) ? labels[x] : parseInt(x); }
+        function val(x) {
+            if (labels[x] !== undefined) return labels[x];
+            
+            const s = x.toString().toLowerCase();
+            
+            // Handle 0x prefix (e.g., 0xFF)
+            if (s.startsWith("0x")) return parseInt(s.slice(2), 16);
+            
+            // Handle $ prefix (e.g., $FF)
+            if (s.startsWith("$")) return parseInt(s.slice(1), 16);
+            
+            // Handle h suffix (e.g., FFh)
+            if (s.endsWith("h")) return parseInt(s.slice(0, -1), 16);
+            
+            return parseInt(x);
+        }        
 
         switch (instr) {
             case "LOAD":
-                output.push(OPCODES.LOAD, reg(parts[1]), val(parts[2]));
+                const r = reg(parts[1]);
+                const v = val(parts[2]);
+                // Push Opcode and Register
+                output.push(OPCODES.LOAD, r);
+                // Push 32-bit value as 4 individual bytes (Little-Endian)
+                output.push(v & 0xFF);
+                output.push((v >> 8) & 0xFF);
+                output.push((v >> 16) & 0xFF);
+                output.push((v >> 24) & 0xFF);
                 break;
 
             case "LOADM":
-                output.push(OPCODES.LOADM, reg(parts[1]), val(parts[2]));
+            case "STORE": {
+                const r = reg(parts[1]);
+                const addr = val(parts[2]);
+                output.push(OPCODES[instr], r);
+                // Emit 16-bit address (Little-Endian)
+                output.push(addr & 0xFF);
+                output.push((addr >> 8) & 0xFF);
                 break;
-
-            case "STORE":
-                output.push(OPCODES.STORE, reg(parts[1]), val(parts[2]));
-                break;
+            }
 
             case "ADD":
             case "SUB":
@@ -126,16 +152,17 @@ function assemble(source) {
             case "JMP":
             case "JZ":
             case "JNZ":
-                output.push(OPCODES[instr], val(parts[1]));
+            case "CALL": {
+                const v = val(parts[1]);
+                output.push(OPCODES[instr]);
+                // Push 32-bit address (Little-Endian)
+                output.push(v & 0xFF, (v >> 8) & 0xFF, (v >> 16) & 0xFF, (v >> 24) & 0xFF);
                 break;
+            }
 
             case "PUSH":
             case "POP":
                 output.push(OPCODES[instr], reg(parts[1]));
-                break;
-            
-            case "CALL":
-                output.push(OPCODES.CALL, val(parts[1]));
                 break;
             
             case "RET":
@@ -159,22 +186,47 @@ function assemble(source) {
 }
 
 const initialProgramText = `
-LOAD R0, 1
-CALL A
-HALT
+; R0: Number being tested (N)
+; R1: Current Divisor (D)
+; R2: Temporary storage / Constant
+; R3: Upper limit (0xFFFFFFFF)
 
-A:
-    LOAD R0, 2
-    PUSH R0      ; Save R0 (which is 2) onto the stack
-    CALL B
-    POP R0       ; Restore R0 from the stack after B returns
-    PRINT R0     ; Print 2 from the restored register
-    RET
+LOAD R0, 0x00000003       ; Start testing at 3
+LOAD R3, 0xFFFFFFFF   ; The 32-bit testing limit
 
-B:
-    LOAD R0, 3
-    PRINT R0     ; Prints 3
-    RET
+MAIN_LOOP:
+    ; --- Limit Check ---
+    CMP R0, R3      ; Compare N to 0xFF
+    JZ FINISHED     ; If exactly the limit, stop
+    
+    LOAD R1, 0x00000002 ; Reset divisor to 2
+    
+CHECK_PRIME:
+    CMP R1, R0
+    JZ IS_PRIME
+
+    ; --- Modulo Check ---
+    MOV R2, R0
+    DIV R2, R1
+    MUL R2, R1
+    
+    CMP R2, R0
+    JZ NOT_PRIME
+
+    LOAD R2, 0x00000001
+    ADD R1, R2
+    JMP CHECK_PRIME
+
+IS_PRIME:
+    PRINT R0
+
+NOT_PRIME:
+    LOAD R2, 0x00000002
+    ADD R0, R2
+    JMP MAIN_LOOP
+
+FINISHED:
+    HALT
 `;
 
 const program = assemble(initialProgramText);
@@ -194,24 +246,48 @@ function clock() {
         case 0x00:
             break;
 
-        case OPCODES.LOAD: { // LOAD r, immediate
+        case OPCODES.LOAD: { // LOAD r, immediate32
             const r = memory[pc++];
-            const value = memory[pc++];
-            registers[r] = value;
+            // Read 4 bytes and shift them back into a single 32-bit number
+            const b1 = memory[pc++];
+            const b2 = memory[pc++];
+            const b3 = memory[pc++];
+            const b4 = memory[pc++];
+            
+            // Combine bytes (Little-Endian)
+            // Using >>> 0 ensures JavaScript treats the result as an Unsigned 32-bit integer
+            registers[r] = (b1 | (b2 << 8) | (b3 << 16) | (b4 << 24)) >>> 0;
             break;
         }
 
-        case OPCODES.LOADM: { // LDR r, addr
+        case OPCODES.LOADM: { // Load 32-bit Word from RAM
             const r = memory[pc++];
-            const addr = memory[pc++];
-            registers[r] = memory[addr];
+            const low = memory[pc++];
+            const high = memory[pc++];
+            const addr = (low | (high << 8)); // Reconstruct 16-bit address
+        
+            // Reconstruct 32-bit value from 4 memory bytes (Little-Endian)
+            registers[r] = (
+                memory[addr] | 
+                (memory[addr + 1] << 8) | 
+                (memory[addr + 2] << 16) | 
+                (memory[addr + 3] << 24)
+            ) >>> 0;
             break;
         }
 
-        case OPCODES.STORE: { // STR r, addr
+        case OPCODES.STORE: { // Store 32-bit Word to RAM
             const r = memory[pc++];
-            const addr = memory[pc++];
-            memory[addr] = registers[r];
+            const low = memory[pc++];
+            const high = memory[pc++];
+            const addr = (low | (high << 8));
+            const value = registers[r];
+        
+            // Deconstruct 32-bit value into 4 memory bytes
+            memory[addr]     = value & 0xFF;
+            memory[addr + 1] = (value >> 8) & 0xFF;
+            memory[addr + 2] = (value >> 16) & 0xFF;
+            memory[addr + 3] = (value >> 24) & 0xFF;
             break;
         }
 
@@ -266,15 +342,18 @@ function clock() {
 
         case OPCODES.NOT: {
             const r = memory[pc++];
-            registers[r] = (~registers[r]) & 0xFF; // Keep it 8-bit
+            registers[r] = (~registers[r]) >>> 0; 
             break;
-        }
+        }        
 
-        case OPCODES.JMP: { // JMP addr
-            const addr = memory[pc++];
-            pc = addr;
+        case OPCODES.JMP: {
+            const b1 = memory[pc++];
+            const b2 = memory[pc++];
+            const b3 = memory[pc++];
+            const b4 = memory[pc++];
+            pc = (b1 | (b2 << 8) | (b3 << 16) | (b4 << 24)) >>> 0;
             break;
-        }
+        }        
 
         case OPCODES.JZ: { // JZ addr
             const addr = memory[pc++];
@@ -323,20 +402,28 @@ function clock() {
         }
 
         case OPCODES.CALL: {
-            const addr = memory[pc++]; // function address
+            // Read 32-bit target
+            const b1 = memory[pc++]; const b2 = memory[pc++];
+            const b3 = memory[pc++]; const b4 = memory[pc++];
+            const target = (b1 | (b2 << 8) | (b3 << 16) | (b4 << 24)) >>> 0;
         
-            // push return address
-            registers[SP]--;
-            memory[registers[SP]] = pc;
+            // Push 32-bit Return Address (current PC)
+            registers[SP] -= 4;
+            const addr = registers[SP];
+            memory[addr]     = pc & 0xFF;
+            memory[addr + 1] = (pc >> 8) & 0xFF;
+            memory[addr + 2] = (pc >> 16) & 0xFF;
+            memory[addr + 3] = (pc >> 24) & 0xFF;
         
-            // jump to function
-            pc = addr;
+            pc = target;
             break;
         }
 
         case OPCODES.RET: {
-            pc = memory[registers[SP]];
-            registers[SP]++;
+            const addr = registers[SP];
+            // Pop 32-bit PC
+            pc = (memory[addr] | (memory[addr+1] << 8) | (memory[addr+2] << 16) | (memory[addr+3] << 24)) >>> 0;
+            registers[SP] += 4;
             break;
         }
 
@@ -395,7 +482,17 @@ Object.assign(ui.defaults.button, {
     flex: '1'
 })
 
-const regLabels = Array.from({length: 7}, (_, i) => ui.label({ text: `R${i}: 0` }));
+const regLabels = Array.from(
+    { length: registers.length - 1 }, 
+    (_, i) => ui.label({ text: `R${i}: 0x00`, style: { minWidth: '70px' } })
+);
+
+// Helper to chunk labels into rows so they don't overflow the screen
+const regRows = [];
+for (let i = 0; i < regLabels.length; i += 4) {
+    regRows.push(ui.row({ style: { gap: '10px' } }, regLabels.slice(i, i + 4)));
+}
+
 const spLabel = ui.label({ text: `SP: ${registers[SP]}` });
 const pcLabel = ui.label({ text: `PC: ${pc}` });
 
@@ -412,7 +509,7 @@ const turboButton = ui.button({
 
 const dashboard = ui.panel({}, [
     ui.label({ text: 'Registers'}),
-    ui.row({}, regLabels),
+    ...regRows,
     ui.row({}, [spLabel, pcLabel]),
 
     ui.divider(),
@@ -480,7 +577,7 @@ const programEditor = ui.textarea({
         localStorage.setItem('cpu_program', programEditor.value);
     },
     style: {
-        height: '600px',
+        height: '100%',
         width: '100%',
         padding: '10px',
         fontFamily: 'monospace',
@@ -547,14 +644,14 @@ const importBtn = ui.button({
     onclick: () => filePicker.el.click() // Open the file dialog secretly
 });
 
-const programPanel = ui.panel({ style: { width: '500px'} }, [
+const programPanel = ui.panel({ style: { width: '500px', height: '90%' } }, [
     ui.label({ text: "Program Editor", style: { fontWeight: 'bold' } }),
     programEditor,
     ui.row({}, [
         loadButton,
         exportBtn,
         importBtn,
-        ui.button({ text: '🗑️ Clear', onclick: () => {
+        ui.button({ text: 'Clear', onclick: () => {
             if(confirm("Clear editor?")) programEditor.value = '';
         }})
     ])
@@ -564,14 +661,14 @@ programPanel.position('right', 10, 50);
 ui.mount(programPanel, document.body);
 
 function updateUI() {
-    // Update the numbered registers
+    // Update general registers in Hex
     regLabels.forEach((label, i) => {
-        label.el.innerText = `R${i}: ${registers[i]}`;
+        label.text = `R${i}: ${toHex(registers[i])}`;
     });
 
-    // Update the special labels
-    spLabel.el.innerText = `SP: ${registers[SP]}`;
-    pcLabel.el.innerText = `PC: ${pc}`;
+    // Update Special registers (SP and PC are usually 16-bit addresses, so 4 digits)
+    spLabel.text = `SP: ${toHex(registers[SP])}`;
+    pcLabel.text = `PC: ${toHex(pc, 8)}`;
 }
 
 function startMachine() {
@@ -605,7 +702,7 @@ function resetMachine() {
     stopMachine();
     pc = 0;
     registers.fill(0);
-    registers[7] = 0xFF; // SP
+    registers[15] = 0xFF; // SP
     ZF = 0;
     terminal.value = '--- System Reset ---\n';
     updateUI();
