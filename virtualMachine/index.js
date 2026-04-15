@@ -2,21 +2,27 @@ import { ui } from '../ui.js';
 
 const memory = new Uint8Array(65536);
 const registers = new Uint32Array(16);
+
 const SP = 15; // last register is stack pointer
 registers[SP] = 0xFFFF; // Start at the end of 64k RAM
 let pc = 0; // Program counter
+
 let ZF = 0; // Zero flag
+let SF = 0; // Sign flag
+let OF = 0; // Overflow flag
+
 let timerId = null;
 let isRunning = false;
 let isTurbo = false; 
 
 const INSTRUCTIONS = {
-    LOAD:   { opcode: 0x10, args: ["reg", "val32"] }, 
-    LOADM:  { opcode: 0x11, args: ["reg", "val32"] },
-    STORE:  { opcode: 0x12, args: ["reg", "val32"] },
-    MOV:    { opcode: 0x13, args: ["reg", "reg"] },
-    LOADI:  { opcode: 0x14, args: ["reg", "reg"] },
-    STOREI: { opcode: 0x15, args: ["reg", "reg"] },
+    LOAD:   { opcode: 0x10, args: ["reg", "val32"] }, // Load immediate
+    LOADM:  { opcode: 0x11, args: ["reg", "val32"] }, // Load from memory
+    STORE:  { opcode: 0x12, args: ["reg", "val32"] }, // Store to memory
+    MOV:    { opcode: 0x13, args: ["reg", "reg"] },   // Copy from one register to another
+    LOADI:  { opcode: 0x14, args: ["reg", "reg"] },   // Load from the memory address in a register
+    LOADIB: { opcode: 0x16, args: ["reg", "reg"] },   // LOADI but load only one byte
+    STOREI: { opcode: 0x15, args: ["reg", "reg"] },   // Store to a memory address in a register
 
     ADD: { opcode: 0x20, args: ["reg", "reg"] },
     SUB: { opcode: 0x21, args: ["reg", "reg"] },
@@ -33,15 +39,20 @@ const INSTRUCTIONS = {
     INC: { opcode: 0x28, args: ["reg"] },
     DEC: { opcode: 0x29, args: ["reg"] },
 
-    JMP:  { opcode: 0x30, args: ["val32"] },
-    JZ:   { opcode: 0x31, args: ["val32"] },
-    JNZ:  { opcode: 0x32, args: ["val32"] },
-    CALL: { opcode: 0x72, args: ["val32"] },
+    JMP: { opcode: 0x30, args: ["val32"] },
+    JZ:  { opcode: 0x31, args: ["val32"] },
+    JNZ: { opcode: 0x32, args: ["val32"] },
+    JG:  { opcode: 0x34, args: ["val32"] },
+    JL:  { opcode: 0x35, args: ["val32"] },
+    JGE: { opcode: 0x36, args: ["val32"] },
+    JLE: { opcode: 0x37, args: ["val32"] },
 
     PUSH:  { opcode: 0x70, args: ["reg"] },
     POP:   { opcode: 0x71, args: ["reg"] },
-    PRINT: { opcode: 0x40, args: ["reg"] },
+    CALL: { opcode: 0x72, args: ["val32"] },
     RET:   { opcode: 0x73, args: [] },
+
+    PRINT: { opcode: 0x40, args: ["reg"] },
     HALT:  { opcode: 0xFF, args: [] }
 };
 
@@ -179,6 +190,13 @@ function clock() {
             break;
         }
 
+        case INSTRUCTIONS.LOADIB.opcode: {
+            const rDest = memory[pc++];
+            const rPtr = memory[pc++];
+            registers[rDest] = memory[registers[rPtr]] >>> 0; // Grab only one byte
+            break;
+        }        
+
         case INSTRUCTIONS.STOREI.opcode: {
             const rPtr = memory[pc++];
             const rSrc = memory[pc++];
@@ -250,10 +268,17 @@ function clock() {
         }
 
         case INSTRUCTIONS.CMP.opcode: {
-            const rA = memory[pc++]; const rB = memory[pc++];
-            ZF = (registers[rA] === registers[rB]) ? 1 : 0;
+            const rA = registers[memory[pc++]] | 0;
+            const rB = registers[memory[pc++]] | 0;
+            const res = (rA - rB) | 0; // Force signed 32-bit
+        
+            ZF = (res === 0) ? 1 : 0;
+            SF = (res < 0) ? 1 : 0;
+            OF = ((rA ^ res) & (rB ^ rA) & 0x80000000) ? 1 : 0;
+
+            console.log(`CMP: a=${rA}, b=${rB}, res=${res}, ZF=${ZF}, SF=${SF}, OF=${OF}`);
             break;
-        }
+        }        
 
         case INSTRUCTIONS.JMP.opcode: pc = read32(); break;
 
@@ -266,6 +291,30 @@ function clock() {
         case INSTRUCTIONS.JNZ.opcode: {
             const addr = read32();
             if (ZF === 0) pc = addr;
+            break;
+        }
+
+        case INSTRUCTIONS.JG.opcode: {
+            const addr = read32();
+            if (ZF === 0 && SF === OF) pc = addr;
+            break;
+        }
+        
+        case INSTRUCTIONS.JL.opcode: {
+            const addr = read32();
+            if (SF !== OF) pc = addr;
+            break;
+        }
+
+        case INSTRUCTIONS.JGE.opcode: {
+            const addr = read32();
+            if (SF === OF) pc = addr;
+            break;
+        }
+        
+        case INSTRUCTIONS.JLE.opcode: {
+            const addr = read32();
+            if (ZF === 1 || SF !== OF) pc = addr;
             break;
         }
 
@@ -290,7 +339,7 @@ function clock() {
             pc = target;
             break;
         }
-        
+
         case INSTRUCTIONS.RET.opcode: {
             pc = memRead32(registers[SP]);
             registers[SP] += 4;
@@ -363,7 +412,7 @@ for (let i = 0; i < regLabels.length; i += 4) {
 const spLabel = ui.label({ text: `SP: ${registers[SP]}` });
 const pcLabel = ui.label({ text: `PC: ${pc}` });
 
-const speedSlider = ui.slider({ value: 500, min: 10, max: 1000 });
+const speedSlider = ui.slider({ value: 900, min: 10, max: 1000 });
 
 const runningLabel = ui.label({ text: 'Stopped' });
 const turboButton = ui.button({
