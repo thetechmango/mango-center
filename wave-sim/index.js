@@ -50,45 +50,62 @@ window.addEventListener('wheel', (e) => {
     brushSize = Math.max(1, Math.min(50, brushSize));
 });
 
-function handleInput() {
-    if (activeButtons === 1 || activeButtons === 2) {
-        for (let dy = -1; dy <= 1; dy++) {
-            for (let dx = -1; dx <= 1; dx++) {
-                const x = mousePos.x + dx;
-                const y = mousePos.y + dy;
-                if (x > 0 && x < width - 1 && y > 0 && y < height - 1) {
-                    const i = y * width + x;
-                    current[i] += (activeButtons === 1) ? 1 : -1;
-                }
-            }
-        }
-    }
-    if (activeButtons === 4) { // Middle click for walls
-        const isEraser = isShiftDown;
-        const r2 = brushSize * brushSize; // Radius squared
+// Helper to apply the circle brush at a specific coordinate
+function applyBrush(targetX, targetY) {
+    const isEraser = isShiftDown;
+    const i = targetY * width + targetX;
 
+    if (activeButtons === 1) {
+        current[i] += 1; 
+    } else if (activeButtons === 2) {
+        current[i] -= 1;
+    }
+
+    if (activeButtons === 4) { 
+        const r2 = brushSize * brushSize;
         for (let dy = -brushSize; dy <= brushSize; dy++) {
             for (let dx = -brushSize; dx <= brushSize; dx++) {
-                // Circle check: x^2 + y^2 <= r^2
                 if (dx * dx + dy * dy <= r2) {
-                    const x = mousePos.x + dx;
-                    const y = mousePos.y + dy;
-
+                    const x = targetX + dx;
+                    const y = targetY + dy;
                     if (x > 0 && x < width - 1 && y > 0 && y < height - 1) {
-                        const i = y * width + x;
-                        
-                        walls[i] = isEraser ? 0 : 1;
-                        
-                        // Clear water energy when placing a wall
-                        if (!isEraser) {
-                            current[i] = 0;
-                            previous[i] = 0;
-                        }
+                        const index = y * width + x;
+                        walls[index] = isEraser ? 0 : 1;
+                        if (!isEraser) { current[index] = 0; previous[index] = 0; }
                     }
                 }
             }
         }
     }
+}
+
+function handleInput() {
+    if (activeButtons > 0) {
+        let x0 = lastMouse.x;
+        let y0 = lastMouse.y;
+        let x1 = mousePos.x;
+        let y1 = mousePos.y;
+
+        let dx = Math.abs(x1 - x0), sx = x0 < x1 ? 1 : -1;
+        let dy = Math.abs(y1 - y0), sy = y0 < y1 ? 1 : -1;
+        let err = (dx > dy ? dx : -dy) / 2, e2;
+
+        // If the mouse hasn't moved at all, just apply once and return
+        if (x0 === x1 && y0 === y1) {
+            applyBrush(x1, y1);
+        } else {
+            // Bresenham loop
+            while (x0 !== x1 || y0 !== y1) {
+                e2 = err;
+                if (e2 > -dx) { err -= dy; x0 += sx; }
+                if (e2 < dy) { err += dx; y0 += sy; }
+                
+                applyBrush(x0, y0); // This now only hits new pixels
+            }
+        }
+    }
+    lastMouse.x = mousePos.x;
+    lastMouse.y = mousePos.y;
 }
 
 function update() {
