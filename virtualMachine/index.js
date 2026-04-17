@@ -228,7 +228,7 @@ function clock() {
         }
 
         case INSTRUCTIONS.INC.opcode: registers[memory[pc++]]++; break;
-        case INSTRUCTIONS.DEC: registers[memory[pc++]]--; break;
+        case INSTRUCTIONS.DEC.opcode: registers[memory[pc++]]--; break;
 
         case INSTRUCTIONS.AND.opcode: {
             const rA = memory[pc++]; const rB = memory[pc++];
