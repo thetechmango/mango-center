@@ -40,7 +40,7 @@ const INSTRUCTIONS = {
     SHR: { opcode: 0x2B, args: ["reg", "reg"] }, // Same but to the right
 
     JMP: { opcode: 0x30, args: ["val32"] },      // Jump to a memory address (immediate)
-    JMPR: { opcode: 0x38, args: ["reg"] },       // Jump toa memory address in a register
+    JMPR: { opcode: 0x38, args: ["reg"] },       // Jump to a memory address in a register
     JZ:  { opcode: 0x31, args: ["val32"] },      // Jump to a memory address if the zero flag is true
     JNZ: { opcode: 0x32, args: ["val32"] },      // Same but only if zero flag is false
     CMP: { opcode: 0x33, args: ["reg", "reg"] }, // Sets the zero flag (ZF), sign flag (SF), and overflow flag (OF). Use this before the comparison jumps
@@ -54,11 +54,12 @@ const INSTRUCTIONS = {
     CALL: { opcode: 0x72, args: ["val32"] }, // PUSH current Program Counter (PC), then JMP to val32 in memory
     RET:   { opcode: 0x73, args: [] },       // POP value from stack into PC (returns to after the CALL)
 
+    RAND: { opcode: 0x80, args: ["reg"] }, // Sets reg to a random unsigned 32 bit integer
+
     PRINT: { opcode: 0x40, args: ["reg"] }, // Prints the value of reg to the terminal in decimal
     HALT:  { opcode: 0xFF, args: [] },      // Halts the program until the user resumes
     NOP: { opcode: 0x00, args: [] }         // Does nothing (no operation)
 };
-
 
 const toHex = (val, size = 8) => '0x' + val.toString(16).toUpperCase().padStart(size, '0');
 
@@ -119,12 +120,11 @@ function assemble(source) {
     return output;
 }
 
-const initialProgramText = `
-; Example Assembly Program
+const initialProgramText = `; Example Assembly Program
 INC R0
-
 PRINT R0
 ADD R0, R0
+CMP R0, R1
 JNZ 0x01
 HALT
 `;
@@ -362,6 +362,13 @@ function clock() {
             break;
         }
 
+        case INSTRUCTIONS.RAND.opcode: {
+            const r = memory[pc++];
+            // >>> 0 forces unsigned 32-bit
+            registers[r] = (Math.random() * 0x100000000) >>> 0;
+            break;
+        }        
+
         case INSTRUCTIONS.PRINT.opcode: {
             const val = registers[memory[pc++]];
             terminal.value += val + '\n';
@@ -369,11 +376,12 @@ function clock() {
             break;
         }
 
-        case INSTRUCTIONS.HALT.opcode:
+        case INSTRUCTIONS.HALT.opcode: {
             stopMachine();
             terminal.value += '--- System Halted ---\n';
             break;
-
+        }
+        
         default:
             console.log("Unknown opcode:", opCode);
             break;
