@@ -28,16 +28,19 @@ const INSTRUCTIONS = {
     SUB: { opcode: 0x21, args: ["reg", "reg"] }, // Same as ADD but subtraction
     MUL: { opcode: 0x22, args: ["reg", "reg"] }, // ...
     DIV: { opcode: 0x23, args: ["reg", "reg"] },
+    MOD: { opcode: 0x2C, args: ["reg", "reg"] },
     AND: { opcode: 0x24, args: ["reg", "reg"] }, // reg1 = reg1 AND (bitwise) reg2
     OR:  { opcode: 0x25, args: ["reg", "reg"] }, // ...
     XOR: { opcode: 0x26, args: ["reg", "reg"] },
     NOT: { opcode: 0x27, args: ["reg"] },
+    NEG: { opcode: 0x2D, args: ["reg"] }, // Negation (two's compliment)
     INC: { opcode: 0x28, args: ["reg"] },        // Increments reg by 1
     DEC: { opcode: 0x29, args: ["reg"] },        // Decrements reg by 1
     SHL: { opcode: 0x2A, args: ["reg", "reg"] }, // Shifts bits of reg1 to the left by reg2 amount
     SHR: { opcode: 0x2B, args: ["reg", "reg"] }, // Same but to the right
 
-    JMP: { opcode: 0x30, args: ["val32"] },      // Jump to a memory address
+    JMP: { opcode: 0x30, args: ["val32"] },      // Jump to a memory address (immediate)
+    JMPR: { opcode: 0x38, args: ["reg"] },       // Jump toa memory address in a register
     JZ:  { opcode: 0x31, args: ["val32"] },      // Jump to a memory address if the zero flag is true
     JNZ: { opcode: 0x32, args: ["val32"] },      // Same but only if zero flag is false
     CMP: { opcode: 0x33, args: ["reg", "reg"] }, // Sets the zero flag (ZF), sign flag (SF), and overflow flag (OF). Use this before the comparison jumps
@@ -52,7 +55,8 @@ const INSTRUCTIONS = {
     RET:   { opcode: 0x73, args: [] },       // POP value from stack into PC (returns to after the CALL)
 
     PRINT: { opcode: 0x40, args: ["reg"] }, // Prints the value of reg to the terminal in decimal
-    HALT:  { opcode: 0xFF, args: [] }       // Halts the program until the user resumes
+    HALT:  { opcode: 0xFF, args: [] },      // Halts the program until the user resumes
+    NOP: { opcode: 0x00, args: [] }         // Does nothing (no operation)
 };
 
 
@@ -151,7 +155,8 @@ function clock() {
     };
 
     switch (opCode) {
-        case 0x00: break;
+        case INSTRUCTIONS.NOP.opcode:
+            break;
 
         case INSTRUCTIONS.LOAD.opcode:
             registers[memory[pc++]] = read32();
@@ -223,6 +228,12 @@ function clock() {
             break;
         }
 
+        case INSTRUCTIONS.MOD.opcode: {
+            const rA = memory[pc++], rB = memory[pc++];
+            registers[rA] = (registers[rA] % registers[rB]) >>> 0;
+            break;
+        }        
+
         case INSTRUCTIONS.INC.opcode: registers[memory[pc++]]++; break;
         case INSTRUCTIONS.DEC.opcode: registers[memory[pc++]]--; break;
 
@@ -250,6 +261,12 @@ function clock() {
             break;
         }
 
+        case INSTRUCTIONS.NEG.opcode: {
+            const r = memory[pc++];
+            registers[r] = (-registers[r]) >>> 0;
+            break;
+        }        
+
         case INSTRUCTIONS.SHL.opcode: {
             const rA = memory[pc++]; const rB = memory[pc++];
             registers[rA] = (registers[rA] << registers[rB]) >>> 0;
@@ -274,6 +291,12 @@ function clock() {
         }        
 
         case INSTRUCTIONS.JMP.opcode: pc = read32(); break;
+
+        case INSTRUCTIONS.JMPR.opcode: {
+            const r = memory[pc++];
+            pc = registers[r] >>> 0;
+            break;
+        }        
 
         case INSTRUCTIONS.JZ.opcode: {
             const addr = read32();
@@ -616,7 +639,7 @@ function resetMachine() {
     pc = 0;
     registers.fill(0);
     registers[15] = 0xFFFF; 
-    ZF = 0;
+    ZF, SF, OF = 0;
     terminal.value = '--- System Reset ---\n';
     updateUI();
 }
