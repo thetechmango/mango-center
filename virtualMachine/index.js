@@ -117,16 +117,12 @@ function assemble(source) {
 
 const initialProgramText = `
 ; Example Assembly Program
-LOAD R0, 0x00000001
-LOAD R1, 0x00000002
-LOAD R2, 0x00000000
+INC R0
 
-LOOP:
-    PRINT R0
-    MUL R0, R1
-    CMP R0, R2
-    JNZ LOOP
-    HALT
+PRINT R0
+ADD R0, R0
+JNZ 0x01
+HALT
 `;
 
 const program = assemble(initialProgramText);
@@ -619,7 +615,7 @@ function resetMachine() {
     stopMachine();
     pc = 0;
     registers.fill(0);
-    registers[15] = 0xFF; // SP
+    registers[15] = 0xFFFF; 
     ZF = 0;
     terminal.value = '--- System Reset ---\n';
     updateUI();
