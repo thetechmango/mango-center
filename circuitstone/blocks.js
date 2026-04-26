@@ -846,12 +846,15 @@ class Receiver extends Block {
 class Random extends Block {
     constructor(x, y, rotation = 0) {
         super(x, y, rotation);
-        this.lastInput = 0;
+        this.input = 0;
     }
 
     update() {
+        const backDir = (this.rotation + 2) % 4;
+        this.input = this.getNeighborPower(backDir) > 0 ? 1 : 0;
+
         // Trigger on rising edge
-        if (this.lastInput === 0 && this.inputPower === 1) {
+        if (this.lastInput === 0 && this.input === 1) {
             this.power = Math.random() > 0.5 ? 1 : 0;
         }
     }
