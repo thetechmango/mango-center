@@ -28,7 +28,7 @@ let frameMultipler = 1; // Number of updates per frame for faster simulation
 let flip = false;
 
 const hexColors = new Uint32Array([
-	0xFF000000, // 0: Black
+	0xFF000000, // 0: Background
 	0xFF666666, // 1: Wall
 	0xFF00FFFF, // 2: Sand
 	0xFFFF0000, // 3: Water
@@ -38,7 +38,6 @@ const hexColors = new Uint32Array([
 ]);
 
 function render() {
-	// Linear loop: 10x faster than nested loops with scaling
 	for (let i = 0; i < cells.length; i++) {
 		screenBuffer[i] = hexColors[cells[i]];
 	}
@@ -159,7 +158,6 @@ function update() {
             
                     if (canAcidEat(below)) {
                         move(idx, below); // Overwrites whatever was there
-                        
                     } else {
                         const dDir = Math.random() > 0.5 ? 1 : -1;
                         const diag1 = (y + 1) * width + (x + dDir);
