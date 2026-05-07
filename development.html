@@ -3,9 +3,10 @@
 <head>
 	<title>Development</title>
 	<link rel="icon" type="image/png" href="images/mangofav.png">
+	<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
 	<style>
 	body {
-		font-family: Arial, Helvetica, sans-serif;
+		font-family: 'Inter', sans-serif;
 		background-color: #505050;
 	}
 	h1 {
@@ -20,9 +21,6 @@
 	a {
 		font-size: 20px;
 	}
-	.name {
-		font-weight: bold;
-	}
 	.date {
 		text-align: right;
 		white-space: nowrap;
@@ -34,17 +32,16 @@
 		width: 70%;
 		transform: translate(-50%);
 		padding: 50px;
-		margin-top: 50px;
-		border: 2px solid black;
-		border-radius: 25px;
+		margin-top: 20px;
+		border-radius: 10px;
 		background-color: #ffffff;
     }
 	#backButton {
 		position: fixed;
 		color: black;
-		background-color: rgb(82, 196, 248);
-        border: 3px solid black;
+		background-color: rgb(77, 175, 255);
         border-radius: 25px;
+		border: 0;
         left: 15px;
         bottom: 15px;
 		width: 180px;
@@ -52,6 +49,7 @@
 		z-index: 9999;
 		cursor: pointer;
 		font-size: 15px;
+        box-shadow: 0 3px 6px rgba(0, 0, 0, 0.25);
 	}
 	</style>
 </head>
@@ -63,7 +61,7 @@
 	<a href="https://github.com/thetechmango/mango-center/">Github Repo</a>
 	<hr>
 	<ul>
-		<li> <span class="name">Project Name</span>
+		<li> <span class="name"><strong>Project Name</strong></span>
 			<span class="date" style="color:black"><strong>Start Date</strong></span>
 		</li>
 	</ul>

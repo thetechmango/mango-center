@@ -3,7 +3,15 @@
   <head>
     <title>Mango Center</title>
     <link rel="icon" type="image/x-icon" href="/images/mango.png">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
     <style>
+      body {
+        background-color: white;
+        font-family: 'Inter', sans-serif;
+        padding: 0;
+        margin: 0;
+        margin-top: 170px;
+      }
       h1 {
         font-size: 40px;
       }
@@ -13,7 +21,7 @@
         field-sizing: content;
         min-width: 300px;
         max-width: calc(100% - 40px);
-        border: 3px solid black;
+        border: 2px solid #707070;
         border-radius: 5px;
         font-size: 30px;
         background-color: white;
@@ -21,12 +29,10 @@
       #clockBox {
         color: black;
         background-color: white;
-        border-style: solid;
-        border-color: black;
         border-radius: 25px;
-        border-width: 4px;
         font-size: 25px;
         padding: 10px;
+        box-shadow: 0 3px 6px rgba(0, 0, 0, 0.25);
       }
       #clock {
         justify-self: flex-start;
@@ -41,26 +47,6 @@
       #soon {
         color: grey;
       }
-      .play {
-        padding: 10px;
-        margin: 10px;
-        border: solid;
-        border-color: black;
-        border-width: 4px;
-        border-radius: 25px;
-        background-color: rgb(82, 196, 248);
-        color: black;
-        width: 100px;
-        font-size: 3vw;
-        vertical-align: middle;
-      }
-      body {
-        background-color: white;
-        font-family: Arial, Helvetica, sans-serif;
-        padding: 0;
-        margin: 0;
-        margin-top: 170px;
-      }
       #title {
         color:black;
         text-align: center;
@@ -70,33 +56,32 @@
         flex-flow: row wrap;
         justify-content: center;
         align-items: center;
-        gap: 20px;
+        gap: 25px;
         background-color: white;
-        padding: 5px;
+        padding: 25px;
         font-size: 50px;
       }
       .projects a {
         flex-grow: 1;
         white-space: nowrap;
         text-align: center;
-        padding: 10px;
-        border: solid;
-        border-color: black;
-        border-width: 4px;
-        border-radius: 25px;
-        background-color: rgb(82, 196, 248);
+        padding: 20px;
+        border-radius: 15px;
+        background-color: rgb(77, 175, 255);
         color: black;
         text-decoration: none;
-        font-size: 50px;
+        font-size: 45px;
+        box-shadow: 0 2px 6px rgba(0, 0, 0, 0.2);
       }
       .projects a:hover {
-        background-color: rgb(60, 170, 220);
+        background-color: rgb(47, 141, 218);
         transform: scale(1.03);
         transition: 0.15s;
+        box-shadow: 0 4px 6px rgba(0, 0, 0, 0.25);
       }
 
       #headerDiv {
-        background-color: rgb(82, 196, 248);
+        background-color: rgb(77, 175, 255);
         width: 100%;
         min-height: 130px;
         top: 0;
@@ -104,7 +89,7 @@
         position: fixed;
         margin: 0;
         padding: 5px;
-        border-bottom: 5px solid black;
+        box-shadow: 0 3px 6px rgba(0, 0, 0, 0.25);
       }
       #headerLinks {
         display: flex;
@@ -124,20 +109,33 @@
         padding: 10px;
         margin: 5px;
         margin-right: 20px;
-        border: solid;
-        border-color: black;
-        border-width: 4px;
+        border: none;
         border-radius: 25px;
         background-color: rgb(255, 255, 255);
         color: black;
         text-decoration: none;
         font-size: 25px;
+        box-shadow: 0 3px 6px rgba(0, 0, 0, 0.25);
       }
       .section {
         color: black;
         margin-left: 15px;
         margin-top: 40px;
         padding: 5px;
+      }
+      .section-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        margin: 40px 15px 10px 15px;
+      }
+
+      .section-header .section {
+        margin: 0;
+      }
+
+      .section-header .search {
+        margin: 0;
       }
     </style>
   </head>
@@ -159,9 +157,10 @@
       </div>
   </header>
   <section>
-    <h1 class="section">My Projects</h1>
-    <input type="text" class="search" id="search1" onkeyup="searchSection('search1', 'projects1')" placeholder="Search..."
-      title="Search">
+    <div class="section-header">
+      <h1 class="section">My Projects</h1>
+      <input type="text" class="search" id="search1" onkeyup="searchSection('search1', 'projects1')" placeholder="Search..." title="Search">
+    </div>
     <div id="projects1" class="projects">
       <a href="/circuitstone/">CircuitStone</a>
       <a href="/neuroevolution/targets.html">Neuroevolution</a>
@@ -190,8 +189,10 @@
   </section>
   <hr>
   <section>
-    <h1 class="section">Community Projects</h1>
-    <input type="text" class="search" id="search2" onkeyup="searchSection('search2', 'projects2')" placeholder="Search..." title="Search">
+    <div class="section-header">
+      <h1 class="section">Community Projects</h1>
+      <input type="text" class="search" id="search2" onkeyup="searchSection('search2', 'projects2')" placeholder="Search..." title="Search">
+    </div>
     <div id="projects2" class="projects">
       <a href="https://studio.code.org/projects/gamelab/cUmpWmkO4WWAkPm8wwZxvB7l-ODY0hI88Wtj36O7sd4">Maneuver</a>
       <a href="https://studio.code.org/projects/gamelab/47O4blo7QERQkVSgb9DmQuCnjb57ucA6es6HLUEGWm8">Galactic Defender</a>

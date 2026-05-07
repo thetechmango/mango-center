@@ -7,29 +7,19 @@
             body {
                 background-color: white;
                 display: flex;
-                justify-content: center; /* Centers horizontally */
-                align-items: center; /* Centers vertically */
+                justify-content: center;
+                align-items: center;
                 height: 100vh;
-                overflow: hidden; /* Disables scrolling */
-            }
-            #return {
-                position: absolute;
-                border: solid black;
-                border-radius: 15px;
-                left: 0px;
-                bottom: 0px;
-                margin: 10px;
-                width: 25%;
-                height: 10%;
+                overflow: hidden;
+
+                transition: background-color 0.4s ease; 
             }
             #clock {
                 text-align: center;
                 font-size: 128px;
                 margin: auto;
-                top: 50%
             }
             
-           /* The switch - the box around the slider */
             .switch {
                 position: absolute;
                 top: 10px;
@@ -46,7 +36,6 @@
                 height: 0;
             }
             
-            /* The slider */
             .slider {
                 position: absolute;
                 cursor: pointer;
@@ -72,11 +61,11 @@
             }
             
             input:checked + .slider {
-                background-color: #2196F3;
+                background-color: rgb(77, 175, 255);
             }
             
             input:focus + .slider {
-                box-shadow: 0 0 1px #2196F3;
+                box-shadow: 0 0 1px rgb(77, 175, 255);
             }
             
             input:checked + .slider:before {
@@ -103,44 +92,63 @@
     <div id="container">
     <h1 id="clock"></h1>
     </div>
-    
-    <a href="https://www.themango.click/">
-    <button id="return">Go to Mango Center</button>
-    </a>
 <script>
-const darkCheckbox = document.getElementById('darkModeCheckbox');
-const clock = document.getElementById('clock');
-    
-darkCheckbox.addEventListener('click', function() {
-    if(darkCheckbox.checked) {
-        document.body.backgroundColor = "black";
-        clock.color = "white";
-    } else {
-        document.body.backgroundColor = "white";
-        clock.color = "black";
-    }
-});
+        const darkCheckbox = document.getElementById('darkModeCheckbox');
+        const clock = document.getElementById('clock');
 
-let militaryTime = false;
-function startTime() {
-    const today = new Date();
-    let h = today.getHours();
-    let m = today.getMinutes();
-    let s = today.getSeconds();
-    if(!militaryTime && h>12) h -= 12; // convert to 12 hour time
-    m = checkTime(m);
-    s = checkTime(s);
-    clock.innerHTML =  h + ":" + m + ":" + s;
-    document.getElementById('title').innerHTML =  h + ":" + m + ":" + s;
-    setTimeout(startTime, 1000);
-}
+        // 1. Check for saved preference on load
+        const isDarkMode = localStorage.getItem('darkMode') === 'enabled';
 
-function checkTime(i) {
-    if (i < 10) {i = "0" + i};  // add zero in front of numbers < 10
-    return i;
-}
+        // 2. Apply saved state immediately
+        if (isDarkMode) {
+            darkCheckbox.checked = true;
+            applyDarkMode(true);
+        }
 
-startTime();
+        darkCheckbox.addEventListener('change', function () {
+            if (darkCheckbox.checked) {
+                applyDarkMode(true);
+                localStorage.setItem('darkMode', 'enabled'); // Save preference
+            } else {
+                applyDarkMode(false);
+                localStorage.setItem('darkMode', 'disabled'); // Save preference
+            }
+        });
+
+        // Helper function to handle the visual changes
+        function applyDarkMode(isDark) {
+            document.body.style.backgroundColor = isDark ? "black" : "white";
+            clock.style.color = isDark ? "white" : "black";
+        }
+
+        let militaryTime = false;
+        function startTime() {
+            const today = new Date();
+            let h = today.getHours();
+            let m = today.getMinutes();
+            let s = today.getSeconds();
+
+            if (!militaryTime) {
+                if (h === 0) h = 12;
+                else if (h > 12) h -= 12;
+            }
+
+            m = checkTime(m);
+            s = checkTime(s);
+
+            const timeString = h + ":" + m + ":" + s;
+            clock.innerHTML = timeString;
+            document.getElementById('title').innerHTML = timeString;
+            setTimeout(startTime, 1000);
+        }
+
+        function checkTime(i) {
+            if (i < 10) { i = "0" + i };
+            return i;
+        }
+
+        startTime();
+
 </script>
 </body>
 </html>
