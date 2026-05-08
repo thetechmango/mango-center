@@ -76,7 +76,6 @@
                 transform: translateX(26px);
             }
             
-            /* Rounded sliders */
             .slider.round {
                 border-radius: 34px;
             }
@@ -98,10 +97,8 @@
         const darkCheckbox = document.getElementById('darkModeCheckbox');
         const clock = document.getElementById('clock');
 
-        // 1. Check for saved preference on load
         const isDarkMode = localStorage.getItem('darkMode') === 'enabled';
 
-        // 2. Apply saved state immediately
         if (isDarkMode) {
             darkCheckbox.checked = true;
             applyDarkMode(true);
@@ -110,14 +107,13 @@
         darkCheckbox.addEventListener('change', function () {
             if (darkCheckbox.checked) {
                 applyDarkMode(true);
-                localStorage.setItem('darkMode', 'enabled'); // Save preference
+                localStorage.setItem('darkMode', 'enabled');
             } else {
                 applyDarkMode(false);
-                localStorage.setItem('darkMode', 'disabled'); // Save preference
+                localStorage.setItem('darkMode', 'disabled');
             }
         });
 
-        // Helper function to handle the visual changes
         function applyDarkMode(isDark) {
             document.body.style.backgroundColor = isDark ? "black" : "white";
             clock.style.color = isDark ? "white" : "black";

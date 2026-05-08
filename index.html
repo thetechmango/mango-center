@@ -24,13 +24,13 @@
 	::-webkit-scrollbar-thumb {
 		background: var(--accent);
 		border-radius: 20px;
-		border: 3px solid transparent;
+		border: 4px solid transparent;
 		background-clip: padding-box;
 	}
 
 	::-webkit-scrollbar-thumb:hover {
 		background: var(--accent-dark);
-		border: 2px solid transparent;
+		border: 3px solid transparent;
 		background-clip: padding-box; 
 	}
 
@@ -295,15 +295,32 @@ function searchSection(searchId, containerId) {
 
 const clockBox = document.getElementById('clockBox');
 
-function time() {
-	const d = new Date();
-	const s = d.getSeconds();
-	const m = d.getMinutes();
-	const h = d.getHours();
-	clockBox.textContent = ("0" + h).substr(-2) + ":" + ("0" + m).substr(-2) + ":" + ("0" + s).substr(-2);
+let militaryTime = false;
+function startTime() {
+	const today = new Date();
+	let h = today.getHours();
+	let m = today.getMinutes();
+	let s = today.getSeconds();
+
+	if (!militaryTime) {
+		if (h === 0) h = 12;
+		else if (h > 12) h -= 12;
+	}
+
+	m = checkTime(m);
+	s = checkTime(s);
+
+	const timeString = h + ":" + m + ":" + s;
+	clockBox.innerText = timeString;
+	setTimeout(startTime, 1000);
 }
-setInterval(time, 1000);
-time();
+
+function checkTime(i) {
+	if (i < 10) { i = "0" + i };
+	return i;
+}
+
+startTime();
 </script>
 </body>
 </html>
