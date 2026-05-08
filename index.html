@@ -1,229 +1,306 @@
 <!doctype html>
 <html>
-  <head>
-    <title>Mango Center</title>
-    <link rel="icon" type="image/x-icon" href="/images/mango.png">
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
-    <style>
-      body {
-        background-color: white;
-        font-family: 'Inter', sans-serif;
-        padding: 0;
-        margin: 0;
-        margin-top: 170px;
-      }
-      h1 {
-        font-size: 40px;
-      }
-      .search {
-        margin-left: 15px;
-        padding: 5px;
-        field-sizing: content;
-        min-width: 300px;
-        max-width: calc(100% - 40px);
-        border: 2px solid #707070;
-        border-radius: 5px;
-        font-size: 30px;
-        background-color: white;
-      }
-      #clockBox {
-        color: black;
-        background-color: white;
-        border-radius: 25px;
-        font-size: 25px;
-        padding: 10px;
-        box-shadow: 0 3px 6px rgba(0, 0, 0, 0.25);
-      }
-      #clock {
-        justify-self: flex-start;
-        padding: 10px;
-        margin: 5px;
-        color: black;
-      }
-      #description {
-        font-size: medium;
-        text-align: center;
-      }
-      #soon {
-        color: grey;
-      }
-      #title {
-        color:black;
-        text-align: center;
-      }
-      .projects {
-        display: flex;
-        flex-flow: row wrap;
-        justify-content: center;
-        align-items: center;
-        gap: 25px;
-        background-color: white;
-        padding: 25px;
-        font-size: 50px;
-      }
-      .projects a {
-        flex-grow: 1;
-        white-space: nowrap;
-        text-align: center;
-        padding: 20px;
-        border-radius: 15px;
-        background-color: rgb(77, 175, 255);
-        color: black;
-        text-decoration: none;
-        font-size: 45px;
-        box-shadow: 0 2px 6px rgba(0, 0, 0, 0.2);
-      }
-      .projects a:hover {
-        background-color: rgb(47, 141, 218);
-        transform: scale(1.03);
-        transition: 0.15s;
-        box-shadow: 0 4px 6px rgba(0, 0, 0, 0.25);
-      }
+<head>
+	<title>Mango Center</title>
+	<link rel="icon" type="image/x-icon" href="/images/mango-32.png">
+	<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+	<style>
+	:root {
+		--main: #ffca4f;
+  		--main-dark:  hsl(from var(--main) h s calc(l - 20));
+		--main-darker: hsl(from var(--main) h s calc(l - 30));
+  		--accent:  #56df34;
+		--accent-dark: hsl(from var(--accent) h s calc(l - 30));
+		--header-color: rgba(251, 196, 46, 0.6);
+	}
+	::-webkit-scrollbar {
+    	width: 16px;
+	}
 
-      #headerDiv {
-        background-color: rgb(77, 175, 255);
-        width: 100%;
-        min-height: 130px;
-        top: 0;
-        left: 0;
-        position: fixed;
-        margin: 0;
-        padding: 5px;
-        box-shadow: 0 3px 6px rgba(0, 0, 0, 0.25);
-      }
-      #headerLinks {
-        display: flex;
-        flex-flow: row nowrap;
-        justify-content: space-between;
-        align-items: center;
-        width: 100%;
-        height: 100%;
-        padding: 5px 20px;
-        box-sizing: border-box;
-        position: absolute;
-        top: 5px;
-        left: 0;
-      }
-      #headerLinks a {
-        float: right;
-        padding: 10px;
-        margin: 5px;
-        margin-right: 20px;
-        border: none;
-        border-radius: 25px;
-        background-color: rgb(255, 255, 255);
-        color: black;
-        text-decoration: none;
-        font-size: 25px;
-        box-shadow: 0 3px 6px rgba(0, 0, 0, 0.25);
-      }
-      .section {
-        color: black;
-        margin-left: 15px;
-        margin-top: 40px;
-        padding: 5px;
-      }
-      .section-header {
-        display: flex;
-        justify-content: space-between;
-        align-items: center;
-        margin: 40px 15px 10px 15px;
-      }
+	::-webkit-scrollbar-track {
+		background: #e9e9e9;
+	}
 
-      .section-header .section {
-        margin: 0;
-      }
+	::-webkit-scrollbar-thumb {
+		background: var(--accent);
+		border-radius: 20px;
+		border: 3px solid transparent;
+		background-clip: padding-box;
+	}
 
-      .section-header .search {
-        margin: 0;
-      }
-    </style>
-  </head>
+	::-webkit-scrollbar-thumb:hover {
+		background: var(--accent-dark);
+		border: 2px solid transparent;
+		background-clip: padding-box; 
+	}
+
+	::selection {
+		background: var(--accent);
+		color: #ffffff
+	}
+
+	body {
+		background-color: #ffffff;
+		font-family: 'Inter', sans-serif;
+		padding: 0;
+		margin: 0;
+		padding-top: 100px;
+	}
+	h1 {
+		font-size: 40px;
+	}
+	.search {
+		background-color: #ffffff;
+		margin-left: 15px;
+		padding: 5px;
+		field-sizing: content;
+		min-width: 300px;
+		max-width: calc(100% - 40px);
+		border: none;
+		border-radius: 5px;
+		font-size: 30px;
+		box-shadow: 0 3px 6px rgba(0, 0, 0, 0.25);
+	}
+	.search:focus {
+		outline: none;
+		border: 2px solid var(--accent);
+		box-shadow: 0 0 12px rgba(86, 223, 52, 0.4);
+		transition: 0.2s;
+	}
+	#clockBox {
+		color: #000000;
+		background-color: #ffffff;
+		border-radius: 25px;
+		font-size: 25px;
+		padding: 10px;
+		box-shadow: 0 3px 6px rgba(0, 0, 0, 0.25);
+	}
+	#clock {
+		justify-self: flex-start;
+		padding: 10px;
+		margin: 5px;
+		color: #000000;
+	}
+	#logoTitleGroup {
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		height: 100%;
+		gap: 15px;
+	}
+
+	#headerLogo {
+		height: 80px;
+		width: auto;
+	}
+
+	#title {
+		margin: 0;
+	}
+	.projects {
+		display: flex;
+		flex-flow: row wrap;
+		justify-content: center;
+		align-items: center;
+		gap: 25px;
+		background-color: #ffffff;
+		padding: 25px;
+		font-size: 50px;
+	}
+	.projects a {
+		flex-grow: 1;
+		white-space: nowrap;
+		text-align: center;
+		padding: 20px;
+		border-radius: 15px;
+		background-color: var(--main);
+		color: #000000;
+		text-decoration: none;
+		font-size: 45px;
+		box-shadow: 0 2px 6px rgba(0, 0, 0, 0.2);
+		border-bottom: 4px solid var(--main-darker);
+	}
+	.projects a:hover {
+		background-color: var(--main-dark);
+		transform: translateY(-4px);
+		transition: 0.15s;
+		box-shadow: 0 4px 6px rgba(0, 0, 0, 0.25);
+	}
+	.projects a:active {
+		background-color: var(--accent);
+		transform: translateY(2px);
+		transition: 0.15s;
+		box-shadow: 0 0 0 rgba(0, 0, 0, 0.2);
+		border-bottom: 4px solid var(--accent-dark);
+	}
+
+	#headerDiv {
+		background-color: var(--header-color);
+		height: 100px;
+		width: 100%;
+		top: 0;
+		left: 0;
+		position: fixed;
+		margin: 0;
+		padding: 5px;
+		box-shadow: 0 3px 6px rgba(0, 0, 0, 0.25);
+		animation: slideDown 0.6s ease-out;
+		transition: transform 0.3s ease;
+		z-index: 9999;
+		backdrop-filter: blur(10px);
+		-webkit-backdrop-filter: blur(10px);
+	}
+	#headerLinks {
+		display: flex;
+		flex-flow: row nowrap;
+		justify-content: space-between;
+		align-items: center;
+		width: 100%;
+		height: 100%;
+		padding: 5px 20px;
+		box-sizing: border-box;
+		position: absolute;
+		top: 5px;
+		left: 0;
+	}
+	#headerLinks a {
+		float: right;
+		padding: 10px;
+		margin: 5px;
+		margin-right: 20px;
+		border: none;
+		border-radius: 25px;
+		background-color: rgb(255, 255, 255);
+		color: #000000;
+		text-decoration: none;
+		font-size: 25px;
+		box-shadow: 0 3px 6px rgba(0, 0, 0, 0.25);
+	}
+	#headerLinks a:hover {
+		color: #ffffff;
+		background-color: var(--accent);
+		transition: 0.2s;
+	}
+	.section {
+		color: #000000;
+		margin-left: 15px;
+		margin-top: 40px;
+		padding: 5px;
+	}
+	.section-header {
+		display: flex;
+		justify-content: space-between;
+		align-items: center;
+		margin: 40px 15px 10px 15px;
+	}
+
+	.section-header .section {
+		margin: 0;
+	}
+
+	.section-header .search {
+		margin: 0;
+	}
+
+	hr {
+		border: 0;
+		height: 2px;
+		background-image: linear-gradient(to right, transparent, var(--accent), transparent);
+		margin: 40px 0;
+	}
+
+	@keyframes slideDown {
+		from { transform: translateY(-100%); opacity: 0; }
+		to { transform: translateY(0); opacity: 1; }
+	}
+	</style>
+</head>
 <body>
-  <header>
-    <div id="headerDiv">
-      <h1 id="title">Mango Center</h1>
-      <h2 id="description">A collection of my projects</h2>
-    
-      <div id="headerLinks">
-        <div id="clock">
-          <span id="clockBox"></span>
-        </div>
-        <div id="navLinks">
-          <a href="/development.html">Development</a>
-          <a href="https://docs.google.com/forms/d/e/1FAIpQLSfqbL6IKn3sJJogwrm___Rg0TF0q9MM_gJS36y0VSZ7Le2YAA/viewform?usp=publish-editor">Feedback</a>
-        </div>
-      </div>
-      </div>
-  </header>
-  <section>
-    <div class="section-header">
-      <h1 class="section">My Projects</h1>
-      <input type="text" class="search" id="search1" onkeyup="searchSection('search1', 'projects1')" placeholder="Search..." title="Search">
-    </div>
-    <div id="projects1" class="projects">
-      <a href="/circuitstone/">CircuitStone</a>
-      <a href="/neuroevolution/targets.html">Neuroevolution</a>
-      <a href="/virtualMachine/">Virtual Machine</a>
-      <a href="/sphereParkour/">Sphere Parkour</a>
-      <a href="/dodge.html?tutorial=true">Dodge</a>
-      <a href="/raytracer/gpu/">Ray Tracer</a>
-      <a href="/voxelEngine/">Voxel Engine</a>
-      <a href="/wave-sim/">Wave Simulation</a>
-      <a href="/physicsEngine/">Physics Engine</a>
-      <a href="/particleLife/">Particle Life</a>
-      <a href="/mangoDash/">Mango Dash</a>
-      <a href="/gameOfLife.html">Game of Life</a>
-      <a href="/fluid-sim/cpu.html">Fluid Simulation</a>
-      <a href="/bouncingRectangle/">Bouncing Rectangle</a>
-      <a href="/snake.html">Snake</a>
-      <a href="/rasterizer/">Rasterizer</a>
-      <a href="/clock.html">Clock</a>
-      <a href="/jsConsole.html">JS Console</a>
-      <a href="/globalClicker/">Global Clicker</a>
-      <a href="/bad-apple/">HTML5 Bad Apple</a>
-      <a href="/mangoclicker/">Mango Clicker</a>
-      <a href="/magic8ball.html">Magic 8 Ball</a>
-      <a href="https://freemcserver.net/server/1777905">My Minecraft Server</a>
-    </div>
-  </section>
-  <hr>
-  <section>
-    <div class="section-header">
-      <h1 class="section">Community Projects</h1>
-      <input type="text" class="search" id="search2" onkeyup="searchSection('search2', 'projects2')" placeholder="Search..." title="Search">
-    </div>
-    <div id="projects2" class="projects">
-      <a href="https://studio.code.org/projects/gamelab/cUmpWmkO4WWAkPm8wwZxvB7l-ODY0hI88Wtj36O7sd4">Maneuver</a>
-      <a href="https://studio.code.org/projects/gamelab/47O4blo7QERQkVSgb9DmQuCnjb57ucA6es6HLUEGWm8">Galactic Defender</a>
-    </div>
+<header>
+	<div id="headerDiv">
+		<div id="logoTitleGroup">
+			<img src="/images/mango-256.png" id="headerLogo" alt="Mango Logo">
+			<h1 id="title">Mango Center</h1>
+		</div>
+	
+	<div id="headerLinks">
+		<div id="clock">
+		<a id="clockBox" href="/clock.html"></a>
+		</div>
+		<div id="navLinks">
+		<a href="/development.html">Development</a>
+		<a href="https://docs.google.com/forms/d/e/1FAIpQLSfqbL6IKn3sJJogwrm___Rg0TF0q9MM_gJS36y0VSZ7Le2YAA/viewform?usp=publish-editor">Feedback</a>
+		</div>
+	</div>
+	</div>
+</header>
+<section>
+	<div class="section-header">
+	<h1 class="section">My Projects</h1>
+	<input type="text" class="search" id="search1" onkeyup="searchSection('search1', 'projects1')" placeholder="Search..." title="Search">
+	</div>
+	<div id="projects1" class="projects">
+	<a href="/circuitstone/">CircuitStone</a>
+	<a href="/neuroevolution/targets.html">Neuroevolution</a>
+	<a href="/virtualMachine/">Virtual Machine</a>
+	<a href="/sphereParkour/">Sphere Parkour</a>
+	<a href="/dodge.html?tutorial=true">Dodge</a>
+	<a href="/raytracer/gpu/">Ray Tracer</a>
+	<a href="/voxelEngine/">Voxel Engine</a>
+	<a href="/wave-sim/">Wave Simulation</a>
+	<a href="/physicsEngine/">Physics Engine</a>
+	<a href="/particleLife/">Particle Life</a>
+	<a href="/mangoDash/">Mango Dash</a>
+	<a href="/gameOfLife.html">Game of Life</a>
+	<a href="/fluid-sim/cpu.html">Fluid Simulation</a>
+	<a href="/bouncingRectangle/">Bouncing Rectangle</a>
+	<a href="/snake.html">Snake</a>
+	<a href="/rasterizer/">Rasterizer</a>
+	<a href="/clock.html">Clock</a>
+	<a href="/jsConsole.html">JS Console</a>
+	<a href="/globalClicker/">Global Clicker</a>
+	<a href="/bad-apple/">HTML5 Bad Apple</a>
+	<a href="/mangoclicker/">Mango Clicker</a>
+	<a href="/magic8ball.html">Magic 8 Ball</a>
+	<a href="https://freemcserver.net/server/1777905">My Minecraft Server</a>
+	</div>
+</section>
+<hr>
+<section>
+	<div class="section-header">
+	<h1 class="section">Community Projects</h1>
+	<input type="text" class="search" id="search2" onkeyup="searchSection('search2', 'projects2')" placeholder="Search..." title="Search">
+	</div>
+	<div id="projects2" class="projects">
+	<a href="https://studio.code.org/projects/gamelab/cUmpWmkO4WWAkPm8wwZxvB7l-ODY0hI88Wtj36O7sd4">Maneuver</a>
+	<a href="https://studio.code.org/projects/gamelab/47O4blo7QERQkVSgb9DmQuCnjb57ucA6es6HLUEGWm8">Galactic Defender</a>
+	</div>
 </section>
 <script>
 function searchSection(searchId, containerId) {
-  var input = document.getElementById(searchId);
-      var filter = input.value.toUpperCase();
-      var container = document.getElementById(containerId);
-      var links = container.getElementsByTagName("a");
+	const input = document.getElementById(searchId);
+	const filter = input.value.toUpperCase();
+	const container = document.getElementById(containerId);
+	const links = container.getElementsByTagName("a");
 
-      for (var i = 0; i < links.length; i++) {
-    var a = links[i];
-    if (a.textContent.toUpperCase().indexOf(filter) > -1) {
-        a.style.display = "";
-    } else {
-        a.style.display = "none";
-    }
-  }
+	for (let i = 0; i < links.length; i++) {
+		const a = links[i];
+		if (a.textContent.toUpperCase().indexOf(filter) > -1) {
+			a.style.display = "";
+		} else {
+			a.style.display = "none";
+		}
+	}
 }
 
-var clockBox = document.getElementById('clockBox');
+const clockBox = document.getElementById('clockBox');
 
 function time() {
-  var d = new Date();
-  var s = d.getSeconds();
-  var m = d.getMinutes();
-  var h = d.getHours();
-  clockBox.textContent =
-    ("0" + h).substr(-2) + ":" + ("0" + m).substr(-2) + ":" + ("0" + s).substr(-2);
+	const d = new Date();
+	const s = d.getSeconds();
+	const m = d.getMinutes();
+	const h = d.getHours();
+	clockBox.textContent = ("0" + h).substr(-2) + ":" + ("0" + m).substr(-2) + ":" + ("0" + s).substr(-2);
 }
 setInterval(time, 1000);
 time();

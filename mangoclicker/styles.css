@@ -178,7 +178,7 @@ margin: 10px;
     background-color: #F1F1A1;
     }
         #mango {
-    background-image: url("../images/mango.png");
+    background-image: url("../images/mango-256.png");
     background-size: cover;
     background-repeat: no-repeat; /* This will prevent the image from repeating */
     border: none;
@@ -186,7 +186,7 @@ margin: 10px;
     height: 400px;
     cursor: pointer;
     padding: 0px;
-    transition: all 0.3s ease-in-out;
+    transition: all 0.1s ease-in-out;
    }
 
         #mango:active {
