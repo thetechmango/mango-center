@@ -1,0 +1,168 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <title>Web Serial Monitor</title>
+    <style>
+        body {
+            font-family: monospace;
+            background: #121212;
+            color: #f1f1f1;
+            padding: 20px;
+            margin: 0;
+            display: flex;
+            flex-direction: column;
+            height: 100vh;
+            box-sizing: border-box;
+        }
+
+        h2 {
+            margin-top: 0;
+            color: #fff;
+        }
+
+        #controls {
+            margin-bottom: 10px;
+            display: flex;
+            gap: 10px;
+            width: 100%;
+        }
+
+        #console {
+            flex: 1;
+            background: #000;
+            border: 1px solid #333;
+            overflow-y: scroll;
+            padding: 10px;
+            box-sizing: border-box;
+            white-space: pre-wrap;
+            font-size: 14px;
+        }
+
+        #inputArea {
+            display: flex;
+            margin-top: 10px;
+            gap: 10px;
+        }
+
+        #serialInput {
+            flex: 1;
+            background: #1a1a1a;
+            color: #f1f1f1;
+            border: 1px solid #333;
+            padding: 10px;
+            font-family: monospace;
+            font-size: 14px;
+        }
+
+        #serialInput:focus {
+            border-color: #f1f1f1;
+            outline: none;
+        }
+
+        button {
+            background: #333;
+            color: #fff;
+            border: 1px solid #555;
+            padding: 10px 20px;
+            cursor: pointer;
+            font-family: monospace;
+            font-size: 14px;
+        }
+
+        button:hover {
+            background: #444;
+        }
+
+        button.connected {
+            background: #8b0000;
+            border-color: #ff3333;
+        }
+
+        button.connected:hover {
+            background: #b30000;
+        }
+
+        #serialInput:disabled {
+            background: #0a0a0a;
+            color: #444;
+            border-color: #222;
+        }
+
+        select {
+            background: #333;
+            color: #fff;
+            border: 1px solid #555;
+            padding: 10px 20px;
+            cursor: pointer;
+            font-family: monospace;
+            font-size: 14px;
+            box-sizing: border-box;
+            height: 42px;
+        }
+        select:hover {
+            background: #444;
+        }
+        select:disabled {
+            background: #222;
+            color: #666;
+            border-color: #333;
+            cursor: not-allowed;
+        }
+
+        .mode-container {
+            display: flex;
+            align-items: center;
+            gap: 5px;
+            color: #aaa;
+            font-size: 14px;
+            cursor: pointer;
+            user-select: none;
+        }
+        .mode-container input {
+            cursor: pointer;
+        }
+
+        .settings-right {
+            margin-left: auto;
+            display: flex;
+            gap: 15px;
+            align-items: center;
+        }
+    </style>
+</head>
+
+<body>
+
+    <h2>Web Serial Monitor</h2>
+    <div id="controls">
+        <button id="connectBtn">Connect to device</button>
+        <select id="baudRate">
+            <option value="9600">9600</option>
+            <option value="19200">19200</option>
+            <option value="38400">38400</option>
+            <option value="57600">57600</option>
+            <option value="115200" selected>115200</option>
+        </select>
+        <div class="settings-right">
+            <label class="mode-container">
+                <input type="checkbox" id="immediateMode"> Immediate Mode (Char)
+            </label>
+            <label class="mode-container">
+                <input type="checkbox" id="autoReconnect" checked> Auto-Reconnect
+            </label>
+        </div>
+        <button id="clearBtn">Clear console</button>
+    </div>
+
+    <div id="console"></div>
+
+    <div id="inputArea">
+        <input type="text" id="serialInput" placeholder="Type data here and press Enter..." disabled />
+    </div>
+
+    <script src="index.js"></script>
+</body>
+
+</html>
