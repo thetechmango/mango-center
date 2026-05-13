@@ -26,10 +26,9 @@ function resetUI() {
     serialInput.value = '';
 }
 
-// Run it manually once on page initialization
 resetUI();
 
-// Connect/Disconnect Toggle Action
+// Connect/Disconnect
 connectBtn.addEventListener('click', async () => {
     if (port) {
         await disconnect();
@@ -50,12 +49,11 @@ connectBtn.addEventListener('click', async () => {
         clearInterval(autoReconnectInterval);
         autoReconnectInterval = null;
         
-        // Trap port acquisition failures cleanly
         try {
             await port.open({ baudRate: selectedBaud });
         } catch (openError) {
             if (openError.name === 'NetworkError') {
-                alert('Connection Failed: This port is already open in another program (like the Arduino IDE or another tab). Close that program and try again.');
+                alert('Connection Failed: This port is already open in another program. Close that program and try again.');
             } else {
                 alert('Could not open serial port: ' + openError.message);
             }
@@ -78,7 +76,6 @@ connectBtn.addEventListener('click', async () => {
         readableStreamClosed = port.readable.pipeTo(textDecoderStream.writable);
         reader = textDecoderStream.readable.getReader();
 
-        // Isolated Try-Catch: Prevents a sudden hardware drop from triggering a manual disconnect cascade
         try {
             while (keepReading) {
                 const { value, done } = await reader.read();
@@ -108,39 +105,33 @@ async function disconnect() {
 
     keepReading = false;
 
-    // 1. Stop reader
     if (reader) {
         try { await reader.cancel(); } catch(e){}
         try { reader.releaseLock(); } catch(e){}
         reader = null;
     }
 
-    // 2. Abort the pipeTo() promise
     if (readableStreamClosed) {
         try { await readableStreamClosed.catch(() => {}); } catch(e){}
         readableStreamClosed = null;
     }
 
-    // 3. Abort TextDecoderStream
     if (textDecoderStream) {
         try { await textDecoderStream.writable.abort(); } catch(e){}
         try { await textDecoderStream.readable.cancel(); } catch(e){}
         textDecoderStream = null;
     }
 
-    // 4. Release writer
     if (outputStream) {
         try { outputStream.releaseLock(); } catch(e){}
         outputStream = null;
     }
 
-    // 5. Close the port
     if (port) {
         try { await port.close(); } catch(e){}
         port = null;
     }
 
-    // 6. Reset UI
     resetUI();
 }
 
@@ -151,29 +142,59 @@ serialInput.addEventListener('keydown', async (event) => {
     const isImmediate = immediateModeCheck.checked;
 
     if (isImmediate) {
-        // Prevent default actions for immediate mode typing
-        event.preventDefault();
-
-        // Ignore utility/modifier key signals (Shift, Control, CapsLock, Arrows, etc.)
-        if (event.key.length > 1 && event.key !== 'Enter' && event.key !== 'Backspace') {
+        // Ignore isolated modifier keys on their own
+        if (['Shift', 'Control', 'Alt', 'Meta', 'CapsLock'].includes(event.key)) {
             return;
         }
 
-        let charToSend = event.key;
-        
-        // Map native action naming keys to standard ASCII equivalents
-        if (charToSend === 'Enter') charToSend = '\n';
-        if (charToSend === 'Backspace') charToSend = '\b'; // Sends ASCII Backspace character
+        // Prevent default browser behavior ONLY after ensuring it's not a global system shortcut
+        if (event.metaKey && event.key !== 'c' && event.key !== 'v') return; 
+        event.preventDefault();
+
+        const encoder = new TextEncoder();
+        let encodedData;
+
+        // Process Ctrl combinations (ASCII Control Characters)
+        if (event.ctrlKey) {
+            const code = event.key.toUpperCase().charCodeAt(0);
+            if (code >= 65 && code <= 90) { // A-Z
+                const controlByte = code - 64; // Maps A->1, B->2, C->3, etc.
+                encodedData = new Uint8Array([controlByte]);
+            } else {
+                return; // Ignore unsupported Ctrl combos
+            }
+        } 
+        // Handle individual action keys
+        else if (event.key === 'Enter') {
+            encodedData = encoder.encode('\n');
+        } else if (event.key === 'Backspace') {
+            encodedData = new Uint8Array([0x08]); // Standard ASCII Backspace
+        } else if (event.key === 'Delete') {
+            encodedData = new Uint8Array([0x7F]); // Standard ASCII Delete
+        } else if (event.key === 'ArrowUp') {
+            encodedData = encoder.encode('\x1b[A'); // ANSI Escape sequences for arrows
+        } else if (event.key === 'ArrowDown') {
+            encodedData = encoder.encode('\x1b[B');
+        } else if (event.key === 'ArrowRight') {
+            encodedData = encoder.encode('\x1b[C');
+        } else if (event.key === 'ArrowLeft') {
+            encodedData = encoder.encode('\x1b[D');
+        } 
+        // Handle all standard printable characters (Length 1 ensures safety)
+        else if (event.key.length === 1) {
+            encodedData = encoder.encode(event.key);
+        } else {
+            return; // Ignore dead keys, function keys (F1-F12), etc.
+        }
 
         try {
-            const encoder = new TextEncoder();
-            const encodedData = encoder.encode(charToSend);
             await outputStream.write(encodedData);
         } catch (error) {
             console.error('Failed to send character:', error);
         }
+
     } else {
-        // Standard Line Mode operation (Sends whole string upon pressing Enter)
+        // Standard Line Mode operation
         if (event.key === 'Enter') {
             const dataToSend = serialInput.value;
             if (dataToSend.length === 0) return;
@@ -190,6 +211,7 @@ serialInput.addEventListener('keydown', async (event) => {
         }
     }
 });
+
 
 // Watchdog listener for unexpected physical hardware drops
 navigator.serial.addEventListener('disconnect', async (event) => {
@@ -219,25 +241,19 @@ navigator.serial.addEventListener('disconnect', async (event) => {
         // Poll every 1 second until the exact device re-appears on the USB bus
         autoReconnectInterval = setInterval(async () => {
             try {
-                // 1. Fetch a fresh array of authorized devices from the browser cache
+                // Fetch a fresh array of authorized devices from the browser cache
                 const allowedPorts = await navigator.serial.getPorts();
                 if (allowedPorts.length === 0) return;
-
-                // 2. Extract the fresh, active hardware pointer instance
                 const freshPort = allowedPorts[0]; 
-
-                // 3. Open the fresh port instance directly
                 await freshPort.open({ baudRate: lastSelectedBaud });
-                
-                // 4. Update your global variable to match the working reference
-                port = freshPort; 
-                
-                // Success! Re-establish functional code pipelines
+
+                port = freshPort;
+
                 clearInterval(autoReconnectInterval);
                 autoReconnectInterval = null;
                 
                 connectBtn.textContent = "Disconnect";
-                connectBtn.style.background = ""; // Revert to your CSS default
+                connectBtn.style.background = "";
                 serialInput.disabled = false;
                 serialInput.focus();
 
@@ -297,5 +313,4 @@ autoReconnectCheck.addEventListener('change', () => {
     localStorage.setItem('webSerial_autoReconnect', autoReconnectCheck.checked);
 });
 
-// Run settings loader on script startup
 loadSavedSettings();
