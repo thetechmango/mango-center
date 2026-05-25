@@ -1,15 +1,295 @@
 import { ui } from '../ui.js';
 
-const memory = new Uint8Array(65536);
-const registers = new Uint32Array(16);
+class CPU {
+    constructor(memorySize = 65536) {
+        this.memory = new Uint8Array(memorySize);
+        this.registers = new Uint32Array(16);
 
-const SP = 15; // last register is stack pointer
-registers[SP] = 0xFFFF; // Start at the end of 64k RAM
-let pc = 0; // Program counter
+        this.SP = 15;
+        this.registers[this.SP] = memorySize;
 
-let ZF = 0; // Zero flag
-let SF = 0; // Sign flag
-let OF = 0; // Overflow flag
+        this.pc = 0;
+
+        this.ZF = 0;
+        this.SF = 0;
+        this.OF = 0;
+
+        this.ops = new Array(256);
+        this.initOps();
+    }
+
+    read32() {
+        const m = this.memory;
+        const pc = this.pc;
+        const val = (m[pc] | (m[pc+1] << 8) | (m[pc+2] << 16) | (m[pc+3] << 24)) >>> 0;
+        this.pc += 4;
+        return val;
+    }
+    
+    memRead32(addr) {
+        const m = this.memory;
+        return (m[addr] | (m[addr+1] << 8) | (m[addr+2] << 16) | (m[addr+3] << 24)) >>> 0;
+    }
+    
+    memWrite32(addr, val) {
+        const m = this.memory;
+        m[addr]     = val & 0xFF;
+        m[addr + 1] = (val >> 8) & 0xFF;
+        m[addr + 2] = (val >> 16) & 0xFF;
+        m[addr + 3] = (val >> 24) & 0xFF;
+    }
+
+    initOps() {
+        const I = INSTRUCTIONS;
+
+        const invalid = (opCode) => {
+            terminal.value += `Unknown opcode: 0x${opCode.toString(16).padStart(2, "0")}\n`;
+            stopMachine?.();
+        };
+
+        this.ops.fill(invalid);
+
+        this.ops[I.NOP.opcode] = () => {};
+
+        this.ops[I.LOAD.opcode] = () => {
+            const mem = this.memory;
+            this.registers[mem[this.pc++]] = this.read32();
+        };
+
+        this.ops[I.LOADM.opcode] = () => {
+            const mem = this.memory;
+            const r = mem[this.pc++];
+            const addr = this.read32();
+            this.registers[r] = this.memRead32(addr);
+        };
+
+        this.ops[I.STORE.opcode] = () => {
+            const mem = this.memory;
+            const r = mem[this.pc++];
+            const addr = this.read32();
+            this.memWrite32(addr, this.registers[r]);
+        };
+
+        this.ops[I.MOV.opcode] = () => {
+            const mem = this.memory;
+            const rDest = mem[this.pc++];
+            const rSrc = mem[this.pc++];
+            this.registers[rDest] = this.registers[rSrc];
+        };
+
+        this.ops[I.LOADI.opcode] = () => {
+            const mem = this.memory;
+            const rDest = mem[this.pc++];
+            const rPtr = mem[this.pc++];
+            this.registers[rDest] = this.memRead32(this.registers[rPtr]);
+        };
+
+        this.ops[I.LOADIB.opcode] = () => {
+            const mem = this.memory;
+            const rDest = mem[this.pc++];
+            const rPtr = mem[this.pc++];
+            this.registers[rDest] = mem[this.registers[rPtr]] >>> 0;
+        };
+
+        this.ops[I.STOREI.opcode] = () => {
+            const mem = this.memory;
+            const rPtr = mem[this.pc++];
+            const rSrc = mem[this.pc++];
+            this.memWrite32(this.registers[rPtr], this.registers[rSrc]);
+        };
+
+        this.ops[I.ADD.opcode] = () => {
+            const mem = this.memory;
+            const rA = mem[this.pc++], rB = mem[this.pc++];
+            this.registers[rA] = (this.registers[rA] + this.registers[rB]) >>> 0;
+        };
+
+        this.ops[I.SUB.opcode] = () => {
+            const mem = this.memory;
+            const rA = mem[this.pc++], rB = mem[this.pc++];
+            this.registers[rA] = (this.registers[rA] - this.registers[rB]) >>> 0;
+        };
+
+        this.ops[I.MUL.opcode] = () => {
+            const mem = this.memory;
+            const rA = mem[this.pc++], rB = mem[this.pc++];
+            this.registers[rA] = (this.registers[rA] * this.registers[rB]) >>> 0;
+        };
+
+        this.ops[I.DIV.opcode] = () => {
+            const mem = this.memory;
+            const rA = mem[this.pc++], rB = mem[this.pc++];
+            this.registers[rA] = Math.floor(this.registers[rA] / this.registers[rB]) >>> 0;
+        };
+
+        this.ops[I.MOD.opcode] = () => {
+            const mem = this.memory;
+            const rA = mem[this.pc++], rB = mem[this.pc++];
+            this.registers[rA] = (this.registers[rA] % this.registers[rB]) >>> 0;
+        };
+
+        this.ops[I.INC.opcode] = () => {
+            const mem = this.memory;
+            const r = mem[this.pc++];
+            this.registers[r] = (this.registers[r] + 1) >>> 0;
+        };
+
+        this.ops[I.DEC.opcode] = () => {
+            const mem = this.memory;
+            const r = mem[this.pc++];
+            this.registers[r] = (this.registers[r] - 1) >>> 0;
+        };
+
+        this.ops[I.AND.opcode] = () => {
+            const mem = this.memory;
+            const rA = mem[this.pc++], rB = mem[this.pc++];
+            this.registers[rA] = (this.registers[rA] & this.registers[rB]) >>> 0;
+        };
+
+        this.ops[I.OR.opcode] = () => {
+            const mem = this.memory;
+            const rA = mem[this.pc++], rB = mem[this.pc++];
+            this.registers[rA] = (this.registers[rA] | this.registers[rB]) >>> 0;
+        };
+
+        this.ops[I.XOR.opcode] = () => {
+            const mem = this.memory;
+            const rA = mem[this.pc++], rB = mem[this.pc++];
+            this.registers[rA] = (this.registers[rA] ^ this.registers[rB]) >>> 0;
+        };
+
+        this.ops[I.NOT.opcode] = () => {
+            const mem = this.memory;
+            const r = mem[this.pc++];
+            this.registers[r] = (~this.registers[r]) >>> 0;
+        };
+
+        this.ops[I.NEG.opcode] = () => {
+            const mem = this.memory;
+            const r = mem[this.pc++];
+            this.registers[r] = (-this.registers[r]) >>> 0;
+        };
+
+        this.ops[I.SHL.opcode] = () => {
+            const mem = this.memory;
+            const rA = mem[this.pc++], rB = mem[this.pc++];
+            this.registers[rA] = (this.registers[rA] << this.registers[rB]) >>> 0;
+        };
+
+        this.ops[I.SHR.opcode] = () => {
+            const mem = this.memory;
+            const rA = mem[this.pc++], rB = mem[this.pc++];
+            this.registers[rA] = (this.registers[rA] >>> this.registers[rB]);
+        };
+
+        this.ops[I.CMP.opcode] = () => {
+            const mem = this.memory;
+            const rA = this.registers[mem[this.pc++]] | 0;
+            const rB = this.registers[mem[this.pc++]] | 0;
+            const res = (rA - rB) | 0;
+
+            this.ZF = (res === 0) ? 1 : 0;
+            this.SF = (res < 0) ? 1 : 0;
+            this.OF = ((rA ^ res) & (rB ^ rA) & 0x80000000) ? 1 : 0;
+        };
+
+        this.ops[I.JMP.opcode] = () => { this.pc = this.read32(); };
+
+        this.ops[I.JMPR.opcode] = () => {
+            const mem = this.memory;
+            const r = mem[this.pc++];
+            this.pc = this.registers[r] >>> 0;
+        };
+
+        this.ops[I.JZ.opcode] = () => {
+            const addr = this.read32();
+            if (this.ZF === 1) this.pc = addr;
+        };
+
+        this.ops[I.JNZ.opcode] = () => {
+            const addr = this.read32();
+            if (this.ZF === 0) this.pc = addr;
+        };
+
+        this.ops[I.JG.opcode] = () => {
+            const addr = this.read32();
+            if (this.ZF === 0 && this.SF === this.OF) this.pc = addr;
+        };
+
+        this.ops[I.JL.opcode] = () => {
+            const addr = this.read32();
+            if (this.SF !== this.OF) this.pc = addr;
+        };
+
+        this.ops[I.JGE.opcode] = () => {
+            const addr = this.read32();
+            if (this.SF === this.OF) this.pc = addr;
+        };
+
+        this.ops[I.JLE.opcode] = () => {
+            const addr = this.read32();
+            if (this.ZF === 1 || this.SF !== this.OF) this.pc = addr;
+        };
+
+        this.ops[I.PUSH.opcode] = () => {
+            const mem = this.memory;
+            const r = mem[this.pc++];
+            this.registers[this.SP] -= 4;
+            this.memWrite32(this.registers[this.SP], this.registers[r]);
+        };
+
+        this.ops[I.POP.opcode] = () => {
+            const mem = this.memory;
+            const r = mem[this.pc++];
+            this.registers[r] = this.memRead32(this.registers[this.SP]);
+            this.registers[this.SP] += 4;
+        };
+
+        this.ops[I.CALL.opcode] = () => {
+            const target = this.read32();
+            this.registers[this.SP] -= 4;
+            this.memWrite32(this.registers[this.SP], this.pc);
+            this.pc = target;
+        };
+
+        this.ops[I.RET.opcode] = () => {
+            this.pc = this.memRead32(this.registers[this.SP]);
+            this.registers[this.SP] += 4;
+        };
+
+        this.ops[I.RAND.opcode] = () => {
+            const mem = this.memory;
+            const r = mem[this.pc++];
+            this.registers[r] = (Math.random() * 0x100000000) >>> 0;
+        };
+
+        this.ops[I.PRINT.opcode] = () => {
+            const mem = this.memory;
+            const val = this.registers[mem[this.pc++]];
+            terminal.value += val + '\n';
+            terminal.el.scrollTop = terminal.el.scrollHeight;
+        };
+
+        this.ops[I.HALT.opcode] = () => {
+            stopMachine();
+            terminal.value += '--- System Halted ---\n';
+        };
+    }
+
+    clock() {
+        const mem = this.memory;
+        const opCode = mem[this.pc++];
+    
+        const op = this.ops[opCode];
+    
+        if (!op) {
+            terminal.value += `Unknown opcode: 0x${opCode.toString(16).padStart(2, "0")}\n`;
+            return;
+        }
+    
+        op();
+    }
+}
 
 let timerId = null;
 let isRunning = false;
@@ -120,6 +400,8 @@ function assemble(source) {
     return output;
 }
 
+let cpu = new CPU(65536);
+
 const initialProgramText = `; Example Assembly Program
 INC R0
 PRINT R0
@@ -133,260 +415,9 @@ const program = assemble(initialProgramText);
 
 // Load into memory
 for (let i = 0; i < program.length; i++) {
-    memory[i] = program[i];
+    cpu.memory[i] = program[i];
 }
 
-function clock() {
-    const opCode = memory[pc++];
-
-    const read32 = () => {
-        const val = (memory[pc] | (memory[pc+1] << 8) | (memory[pc+2] << 16) | (memory[pc+3] << 24)) >>> 0;
-        pc += 4;
-        return val;
-    };
-
-    const memRead32 = (addr) => (memory[addr] | (memory[addr+1] << 8) | (memory[addr+2] << 16) | (memory[addr+3] << 24)) >>> 0;
-    
-    const memWrite32 = (addr, val) => {
-        memory[addr]     = val & 0xFF;
-        memory[addr + 1] = (val >> 8) & 0xFF;
-        memory[addr + 2] = (val >> 16) & 0xFF;
-        memory[addr + 3] = (val >> 24) & 0xFF;
-    };
-
-    switch (opCode) {
-        case INSTRUCTIONS.NOP.opcode:
-            break;
-
-        case INSTRUCTIONS.LOAD.opcode:
-            registers[memory[pc++]] = read32();
-            break;
-
-        case INSTRUCTIONS.LOADM.opcode: {
-            const r = memory[pc++];
-            const addr = read32();
-            registers[r] = memRead32(addr);
-            break;
-        }
-
-        case INSTRUCTIONS.STORE.opcode: {
-            const r = memory[pc++];
-            const addr = read32();
-            memWrite32(addr, registers[r]);
-            break;
-        }
-
-        case INSTRUCTIONS.MOV.opcode: {
-            const rDest = memory[pc++];
-            const rSrc = memory[pc++];
-            registers[rDest] = registers[rSrc];
-            break;
-        }
-
-        case INSTRUCTIONS.LOADI.opcode: {
-            const rDest = memory[pc++];
-            const rPtr = memory[pc++];
-            registers[rDest] = memRead32(registers[rPtr]);
-            break;
-        }
-
-        case INSTRUCTIONS.LOADIB.opcode: {
-            const rDest = memory[pc++];
-            const rPtr = memory[pc++];
-            registers[rDest] = memory[registers[rPtr]] >>> 0; // Grab only one byte
-            break;
-        }        
-
-        case INSTRUCTIONS.STOREI.opcode: {
-            const rPtr = memory[pc++];
-            const rSrc = memory[pc++];
-            memWrite32(registers[rPtr], registers[rSrc]);
-            break;
-        }
-
-        case INSTRUCTIONS.ADD.opcode: {
-            const rA = memory[pc++]; const rB = memory[pc++];
-            registers[rA] = (registers[rA] + registers[rB]) >>> 0;
-            break;
-        }
-
-        case INSTRUCTIONS.SUB.opcode: {
-            const rA = memory[pc++]; const rB = memory[pc++];
-            registers[rA] = (registers[rA] - registers[rB]) >>> 0;
-            break;
-        }
-
-        case INSTRUCTIONS.MUL.opcode: {
-            const rA = memory[pc++]; const rB = memory[pc++];
-            registers[rA] = (registers[rA] * registers[rB]) >>> 0;
-            break;
-        }
-
-        case INSTRUCTIONS.DIV.opcode: {
-            const rA = memory[pc++]; const rB = memory[pc++];
-            registers[rA] = Math.floor(registers[rA] / registers[rB]) >>> 0;
-            break;
-        }
-
-        case INSTRUCTIONS.MOD.opcode: {
-            const rA = memory[pc++], rB = memory[pc++];
-            registers[rA] = (registers[rA] % registers[rB]) >>> 0;
-            break;
-        }        
-
-        case INSTRUCTIONS.INC.opcode: registers[memory[pc++]]++; break;
-        case INSTRUCTIONS.DEC.opcode: registers[memory[pc++]]--; break;
-
-        case INSTRUCTIONS.AND.opcode: {
-            const rA = memory[pc++]; const rB = memory[pc++];
-            registers[rA] = (registers[rA] & registers[rB]) >>> 0;
-            break;
-        }
-
-        case INSTRUCTIONS.OR.opcode: {
-            const rA = memory[pc++]; const rB = memory[pc++];
-            registers[rA] = (registers[rA] | registers[rB]) >>> 0;
-            break;
-        }
-
-        case INSTRUCTIONS.XOR.opcode: {
-            const rA = memory[pc++]; const rB = memory[pc++];
-            registers[rA] = (registers[rA] ^ registers[rB]) >>> 0;
-            break;
-        }
-
-        case INSTRUCTIONS.NOT.opcode: {
-            const r = memory[pc++];
-            registers[r] = (~registers[r]) >>> 0;
-            break;
-        }
-
-        case INSTRUCTIONS.NEG.opcode: {
-            const r = memory[pc++];
-            registers[r] = (-registers[r]) >>> 0;
-            break;
-        }        
-
-        case INSTRUCTIONS.SHL.opcode: {
-            const rA = memory[pc++]; const rB = memory[pc++];
-            registers[rA] = (registers[rA] << registers[rB]) >>> 0;
-            break;
-        }
-
-        case INSTRUCTIONS.SHR.opcode: {
-            const rA = memory[pc++]; const rB = memory[pc++];
-            registers[rA] = (registers[rA] >>> registers[rB]);
-            break;
-        }
-
-        case INSTRUCTIONS.CMP.opcode: {
-            const rA = registers[memory[pc++]] | 0;
-            const rB = registers[memory[pc++]] | 0;
-            const res = (rA - rB) | 0; // Force signed 32-bit
-        
-            ZF = (res === 0) ? 1 : 0;
-            SF = (res < 0) ? 1 : 0;
-            OF = ((rA ^ res) & (rB ^ rA) & 0x80000000) ? 1 : 0;
-            break;
-        }        
-
-        case INSTRUCTIONS.JMP.opcode: pc = read32(); break;
-
-        case INSTRUCTIONS.JMPR.opcode: {
-            const r = memory[pc++];
-            pc = registers[r] >>> 0;
-            break;
-        }        
-
-        case INSTRUCTIONS.JZ.opcode: {
-            const addr = read32();
-            if (ZF === 1) pc = addr;
-            break;
-        }
-
-        case INSTRUCTIONS.JNZ.opcode: {
-            const addr = read32();
-            if (ZF === 0) pc = addr;
-            break;
-        }
-
-        case INSTRUCTIONS.JG.opcode: {
-            const addr = read32();
-            if (ZF === 0 && SF === OF) pc = addr;
-            break;
-        }
-        
-        case INSTRUCTIONS.JL.opcode: {
-            const addr = read32();
-            if (SF !== OF) pc = addr;
-            break;
-        }
-
-        case INSTRUCTIONS.JGE.opcode: {
-            const addr = read32();
-            if (SF === OF) pc = addr;
-            break;
-        }
-        
-        case INSTRUCTIONS.JLE.opcode: {
-            const addr = read32();
-            if (ZF === 1 || SF !== OF) pc = addr;
-            break;
-        }
-
-        case INSTRUCTIONS.PUSH.opcode: {
-            const r = memory[pc++];
-            registers[SP] -= 4;
-            memWrite32(registers[SP], registers[r]);
-            break;
-        }
-
-        case INSTRUCTIONS.POP.opcode: {
-            const r = memory[pc++];
-            registers[r] = memRead32(registers[SP]);
-            registers[SP] += 4;
-            break;
-        }
-
-        case INSTRUCTIONS.CALL.opcode: {
-            const target = read32();
-            registers[SP] -= 4;
-            memWrite32(registers[SP], pc);
-            pc = target;
-            break;
-        }
-
-        case INSTRUCTIONS.RET.opcode: {
-            pc = memRead32(registers[SP]);
-            registers[SP] += 4;
-            break;
-        }
-
-        case INSTRUCTIONS.RAND.opcode: {
-            const r = memory[pc++];
-            // >>> 0 forces unsigned 32-bit
-            registers[r] = (Math.random() * 0x100000000) >>> 0;
-            break;
-        }        
-
-        case INSTRUCTIONS.PRINT.opcode: {
-            const val = registers[memory[pc++]];
-            terminal.value += val + '\n';
-            terminal.el.scrollTop = terminal.el.scrollHeight;
-            break;
-        }
-
-        case INSTRUCTIONS.HALT.opcode: {
-            stopMachine();
-            terminal.value += '--- System Halted ---\n';
-            break;
-        }
-        
-        default:
-            console.log("Unknown opcode:", opCode);
-            break;
-    }
-}
 
 // UI
 
@@ -423,7 +454,7 @@ Object.assign(ui.defaults.button, {
 })
 
 const regLabels = Array.from(
-    { length: registers.length - 1 }, 
+    { length: cpu.registers.length - 1 }, 
     (_, i) => ui.label({ text: `R${i}: 0x00`, style: { minWidth: '70px' } })
 );
 
@@ -433,8 +464,8 @@ for (let i = 0; i < regLabels.length; i += 4) {
     regRows.push(ui.row({ style: { gap: '10px' } }, regLabels.slice(i, i + 4)));
 }
 
-const spLabel = ui.label({ text: `SP: ${registers[SP]}` });
-const pcLabel = ui.label({ text: `PC: ${pc}` });
+const spLabel = ui.label({ text: `SP: ${cpu.registers[cpu.SP]}` });
+const pcLabel = ui.label({ text: `PC: ${cpu.pc}` });
 
 const speedSlider = ui.slider({ value: 900, min: 10, max: 1000 });
 
@@ -537,8 +568,8 @@ const loadButton = ui.button({
     onclick: () => {
         try {
             const bytes = assemble(programEditor.value);
-            memory.fill(0); // Optional: clear old memory
-            for (let i = 0; i < bytes.length; i++) memory[i] = bytes[i];
+            cpu.memory.fill(0);
+            for (let i = 0; i < bytes.length; i++) cpu.memory[i] = bytes[i];
             resetMachine();
             terminal.value += "Assembly successful: " + bytes.length + " bytes loaded.\n";
         } catch (e) {
@@ -607,12 +638,12 @@ ui.mount(programPanel, document.body);
 function updateUI() {
     // Update general registers in Hex
     regLabels.forEach((label, i) => {
-        label.text = `R${i}: ${toHex(registers[i])}`;
+        label.text = `R${i}: ${toHex(cpu.registers[i])}`;
     });
 
     // Update Special registers (SP and PC are usually 16-bit addresses, so 4 digits)
-    spLabel.text = `SP: ${toHex(registers[SP])}`;
-    pcLabel.text = `PC: ${toHex(pc, 8)}`;
+    spLabel.text = `SP: ${toHex(cpu.registers[cpu.SP])}`;
+    pcLabel.text = `PC: ${toHex(cpu.pc, 8)}`;
 }
 
 function startMachine() {
@@ -638,44 +669,50 @@ function stopMachine() {
 
 function stepMachine() {
     stopMachine();
-    clock();
+    cpu.clock();
     updateUI();
 }
 
 function resetMachine() {
     stopMachine();
-    pc = 0;
-    registers.fill(0);
-    registers[15] = 0xFFFF; 
-    ZF, SF, OF = 0;
+    cpu.pc = 0;
+    cpu.registers.fill(0);
+    cpu.registers[15] = 0xFFFF; 
+    cpu.ZF, cpu.SF, cpu.OF = 0;
     terminal.value = '--- System Reset ---\n';
     updateUI();
 }
 
+const turboBatchSize = 1000;
+
 function loop() {
     if (!isRunning) return;
 
-    if (isTurbo) {
-        // Turbo mode
-        let ticks = 0;
-        const maxTicks = 100000;
+    if (cpu.pc >= cpu.memory.length) {
+        terminal.value += `--- End of Memory Reached ---\n`;
+        stopMachine();
+        return;
+    }
 
-        while (isRunning) {
-            if (ticks > maxTicks) {
-                terminal.value += `--- Turbo Tick Limit Reached ---\n`;
+    if (isTurbo) {
+        for (let i = 0; i < turboBatchSize; i++) {
+            if (cpu.pc >= cpu.memory.length) {
+                terminal.value += `--- End of Memory Reached ---\n`;
+                stopMachine();
                 break;
             }
-            clock();
-            ticks++;
+            if (!isRunning) {
+                stopMachine();
+                break;
+            }
+            cpu.clock();
         }
-        stopMachine();
-        updateUI();
     } else {
-        // Normal Mode
-        clock();
-        updateUI();
-        timerId = setTimeout(loop, 1010 - speedSlider.value);
+        cpu.clock();
     }
+
+    updateUI();
+    timerId = setTimeout(loop, isTurbo ? 0 : 1010 - speedSlider.value);
 }
 
 loadButton.el.click();
