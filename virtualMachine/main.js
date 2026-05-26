@@ -14,6 +14,8 @@ class CPU {
         this.SF = 0;
         this.OF = 0;
 
+        this.framebuffer = new Uint8Array(128 * 64);
+
         this.ops = new Array(256);
         this.initOps();
     }
@@ -24,6 +26,10 @@ class CPU {
         const val = (m[pc] | (m[pc+1] << 8) | (m[pc+2] << 16) | (m[pc+3] << 24)) >>> 0;
         this.pc += 4;
         return val;
+    }
+
+    writeReg(r, val) {
+        if (r !== 0) this.registers[r] = val >>> 0;
     }
     
     memRead32(addr) {
@@ -53,14 +59,15 @@ class CPU {
 
         this.ops[I.LOAD.opcode] = () => {
             const mem = this.memory;
-            this.registers[mem[this.pc++]] = this.read32();
+            const r = mem[this.pc++];
+            this.writeReg(r, this.read32());
         };
 
         this.ops[I.LOADM.opcode] = () => {
             const mem = this.memory;
             const r = mem[this.pc++];
             const addr = this.read32();
-            this.registers[r] = this.memRead32(addr);
+            this.writeReg(r, this.memRead32(addr));
         };
 
         this.ops[I.STORE.opcode] = () => {
@@ -74,21 +81,21 @@ class CPU {
             const mem = this.memory;
             const rDest = mem[this.pc++];
             const rSrc = mem[this.pc++];
-            this.registers[rDest] = this.registers[rSrc];
+            this.writeReg(rDest, this.registers[rSrc]);
         };
 
         this.ops[I.LOADI.opcode] = () => {
             const mem = this.memory;
             const rDest = mem[this.pc++];
             const rPtr = mem[this.pc++];
-            this.registers[rDest] = this.memRead32(this.registers[rPtr]);
+            this.writeReg(rDest, this.memRead32(this.registers[rPtr]));
         };
 
         this.ops[I.LOADIB.opcode] = () => {
             const mem = this.memory;
             const rDest = mem[this.pc++];
             const rPtr = mem[this.pc++];
-            this.registers[rDest] = mem[this.registers[rPtr]] >>> 0;
+            this.writeReg(rDest, this.memory[this.registers[rPtr]] >>> 0);
         };
 
         this.ops[I.STOREI.opcode] = () => {
@@ -101,85 +108,85 @@ class CPU {
         this.ops[I.ADD.opcode] = () => {
             const mem = this.memory;
             const rA = mem[this.pc++], rB = mem[this.pc++];
-            this.registers[rA] = (this.registers[rA] + this.registers[rB]) >>> 0;
+            this.writeReg(rA, this.registers[rA] + this.registers[rB]);
         };
 
         this.ops[I.SUB.opcode] = () => {
             const mem = this.memory;
             const rA = mem[this.pc++], rB = mem[this.pc++];
-            this.registers[rA] = (this.registers[rA] - this.registers[rB]) >>> 0;
+            this.writeReg(rA, this.registers[rA] - this.registers[rB]);
         };
 
         this.ops[I.MUL.opcode] = () => {
             const mem = this.memory;
             const rA = mem[this.pc++], rB = mem[this.pc++];
-            this.registers[rA] = (this.registers[rA] * this.registers[rB]) >>> 0;
+            this.writeReg(rA, this.registers[rA] * this.registers[rB]);
         };
 
         this.ops[I.DIV.opcode] = () => {
             const mem = this.memory;
             const rA = mem[this.pc++], rB = mem[this.pc++];
-            this.registers[rA] = Math.floor(this.registers[rA] / this.registers[rB]) >>> 0;
+            this.writeReg(rA, Math.floor(this.registers[rA] / this.registers[rB]));
         };
 
         this.ops[I.MOD.opcode] = () => {
             const mem = this.memory;
             const rA = mem[this.pc++], rB = mem[this.pc++];
-            this.registers[rA] = (this.registers[rA] % this.registers[rB]) >>> 0;
+            this.writeReg(rA, this.registers[rA] % this.registers[rB]);
         };
 
         this.ops[I.INC.opcode] = () => {
             const mem = this.memory;
             const r = mem[this.pc++];
-            this.registers[r] = (this.registers[r] + 1) >>> 0;
+            this.writeReg(r, this.registers[r] + 1);
         };
 
         this.ops[I.DEC.opcode] = () => {
             const mem = this.memory;
             const r = mem[this.pc++];
-            this.registers[r] = (this.registers[r] - 1) >>> 0;
+            this.writeReg(r, this.registers[r] - 1);
         };
 
         this.ops[I.AND.opcode] = () => {
             const mem = this.memory;
             const rA = mem[this.pc++], rB = mem[this.pc++];
-            this.registers[rA] = (this.registers[rA] & this.registers[rB]) >>> 0;
+            this.writeReg(rA, this.registers[rA] & this.registers[rB]);
         };
 
         this.ops[I.OR.opcode] = () => {
             const mem = this.memory;
             const rA = mem[this.pc++], rB = mem[this.pc++];
-            this.registers[rA] = (this.registers[rA] | this.registers[rB]) >>> 0;
+            this.writeReg(rA, this.registers[rA] | this.registers[rB]);
         };
 
         this.ops[I.XOR.opcode] = () => {
             const mem = this.memory;
             const rA = mem[this.pc++], rB = mem[this.pc++];
-            this.registers[rA] = (this.registers[rA] ^ this.registers[rB]) >>> 0;
+            this.writeReg(rA, this.registers[rA] ^ this.registers[rB]);
         };
 
         this.ops[I.NOT.opcode] = () => {
             const mem = this.memory;
             const r = mem[this.pc++];
-            this.registers[r] = (~this.registers[r]) >>> 0;
+            this.writeReg(r, ~this.registers[r]);
         };
 
         this.ops[I.NEG.opcode] = () => {
             const mem = this.memory;
             const r = mem[this.pc++];
-            this.registers[r] = (-this.registers[r]) >>> 0;
+            this.writeReg(r, -this.registers[r]);
         };
 
         this.ops[I.SHL.opcode] = () => {
             const mem = this.memory;
             const rA = mem[this.pc++], rB = mem[this.pc++];
-            this.registers[rA] = (this.registers[rA] << this.registers[rB]) >>> 0;
+            this.writeReg(rA, this.registers[rA] << this.registers[rB]);
         };
 
         this.ops[I.SHR.opcode] = () => {
             const mem = this.memory;
             const rA = mem[this.pc++], rB = mem[this.pc++];
-            this.registers[rA] = (this.registers[rA] >>> this.registers[rB]);
+            this.writeReg(rA, this.registers[rA] >>> this.registers[rB]);
         };
 
         this.ops[I.CMP.opcode] = () => {
@@ -241,7 +248,7 @@ class CPU {
         this.ops[I.POP.opcode] = () => {
             const mem = this.memory;
             const r = mem[this.pc++];
-            this.registers[r] = this.memRead32(this.registers[this.SP]);
+            this.writeReg(r, this.memRead32(this.registers[this.SP]));
             this.registers[this.SP] += 4;
         };
 
@@ -260,7 +267,7 @@ class CPU {
         this.ops[I.RAND.opcode] = () => {
             const mem = this.memory;
             const r = mem[this.pc++];
-            this.registers[r] = (Math.random() * 0x100000000) >>> 0;
+            this.writeReg(r, (Math.random() * 0x100000000) >>> 0);
         };
 
         this.ops[I.PRINT.opcode] = () => {
@@ -268,6 +275,49 @@ class CPU {
             const val = this.registers[mem[this.pc++]];
             terminal.value += val + '\n';
             terminal.el.scrollTop = terminal.el.scrollHeight;
+        };
+
+        this.ops[I.DRAW.opcode] = () => {
+            const mem = this.memory;
+        
+            const x = this.registers[mem[this.pc++]];
+            const y = this.registers[mem[this.pc++]];
+            const c = this.registers[mem[this.pc++]];
+        
+            if (x < WIDTH && y < HEIGHT) {
+                this.framebuffer[y * WIDTH + x] = c & 0xFF;
+            }
+        };
+
+        this.ops[I.FILL.opcode] = () => {
+            const mem = this.memory;
+            const c = this.registers[mem[this.pc++]] & 0xFF;
+        
+            this.framebuffer.fill(c);
+        };
+
+        this.ops[I.RECT.opcode] = () => {
+            const mem = this.memory;
+        
+            const x = this.registers[mem[this.pc++]];
+            const y = this.registers[mem[this.pc++]];
+            const w = this.registers[mem[this.pc++]];
+            const h = this.registers[mem[this.pc++]];
+            const c = this.registers[mem[this.pc++]] & 0xFF;
+        
+            const fb = this.framebuffer;
+        
+            for (let yy = 0; yy < h; yy++) {
+                const py = y + yy;
+                if (py >= HEIGHT) break;
+        
+                for (let xx = 0; xx < w; xx++) {
+                    const px = x + xx;
+                    if (px >= WIDTH) break;
+        
+                    fb[py * WIDTH + px] = c;
+                }
+            }
         };
 
         this.ops[I.HALT.opcode] = () => {
@@ -296,6 +346,8 @@ let isRunning = false;
 let isTurbo = false; 
 
 const INSTRUCTIONS = {
+    NOP: { opcode: 0x00, args: [] },         // Does nothing (no operation)
+
     LOAD:   { opcode: 0x10, args: ["reg", "val32"] }, // Load immediate
     LOADM:  { opcode: 0x11, args: ["reg", "val32"] }, // Load from memory
     STORE:  { opcode: 0x12, args: ["reg", "val32"] }, // Store to memory
@@ -313,7 +365,7 @@ const INSTRUCTIONS = {
     OR:  { opcode: 0x25, args: ["reg", "reg"] }, // ...
     XOR: { opcode: 0x26, args: ["reg", "reg"] },
     NOT: { opcode: 0x27, args: ["reg"] },
-    NEG: { opcode: 0x2D, args: ["reg"] }, // Negation (two's compliment)
+    NEG: { opcode: 0x2D, args: ["reg"] },        // Negation (two's compliment)
     INC: { opcode: 0x28, args: ["reg"] },        // Increments reg by 1
     DEC: { opcode: 0x29, args: ["reg"] },        // Decrements reg by 1
     SHL: { opcode: 0x2A, args: ["reg", "reg"] }, // Shifts bits of reg1 to the left by reg2 amount
@@ -329,16 +381,20 @@ const INSTRUCTIONS = {
     JGE: { opcode: 0x36, args: ["val32"] },      // Same but greater than or equal to
     JLE: { opcode: 0x37, args: ["val32"] },      // Same but less than or equal to
 
+    PRINT: { opcode: 0x40, args: ["reg"] },  // Prints the value of reg to the terminal in decimal
+
     PUSH:  { opcode: 0x70, args: ["reg"] },  // Decrement SP by 4, then write reg value to [SP]
     POP:   { opcode: 0x71, args: ["reg"] },  // Read value at [SP] into reg, then increment SP by 4
     CALL: { opcode: 0x72, args: ["val32"] }, // PUSH current Program Counter (PC), then JMP to val32 in memory
     RET:   { opcode: 0x73, args: [] },       // POP value from stack into PC (returns to after the CALL)
 
-    RAND: { opcode: 0x80, args: ["reg"] }, // Sets reg to a random unsigned 32 bit integer
+    RAND: { opcode: 0x80, args: ["reg"] },   // Sets reg to a random unsigned 32 bit integer
 
-    PRINT: { opcode: 0x40, args: ["reg"] }, // Prints the value of reg to the terminal in decimal
-    HALT:  { opcode: 0xFF, args: [] },      // Halts the program until the user resumes
-    NOP: { opcode: 0x00, args: [] }         // Does nothing (no operation)
+    DRAW: { opcode: 0x90, args: ["reg", "reg", "reg"] }, // x, y, color
+    FILL: { opcode: 0x91, args: ["reg"] },               // color
+    RECT: { opcode: 0x92, args: ["reg", "reg", "reg", "reg", "reg"] }, // x, y, width, height, color
+
+    HALT:  { opcode: 0xFF, args: [] }      // Halts the program until the user resumes
 };
 
 const toHex = (val, size = 8) => '0x' + val.toString(16).toUpperCase().padStart(size, '0');
@@ -635,6 +691,40 @@ const programPanel = ui.panel({ style: { width: '500px', height: '90%' } }, [
 programPanel.position('right', 10, 50);
 ui.mount(programPanel, document.body);
 
+const display = ui.el("canvas", { style: { width: '1024', height: '512' } });
+
+const displayPanel = ui.panel({}, [
+    display
+]);
+
+displayPanel.position('bottom', 10, 50);
+ui.mount(displayPanel, document.body);
+
+const WIDTH = 128;
+const HEIGHT = 64;
+
+const ctx = display.el.getContext("2d");
+ctx.imageSmoothingEnabled = false;
+
+const img = ctx.createImageData(WIDTH, HEIGHT);
+
+function drawDisplay() {
+    const fb = cpu.framebuffer;
+    const data = img.data;
+
+    for (let i = 0; i < fb.length; i++) {
+        const v = fb[i];
+        const idx = i * 4;
+
+        data[idx]     = v;
+        data[idx + 1] = v;
+        data[idx + 2] = v;
+        data[idx + 3] = 255;
+    }
+
+    ctx.putImageData(img, 0, 0);
+}
+
 function updateUI() {
     // Update general registers in Hex
     regLabels.forEach((label, i) => {
@@ -644,6 +734,8 @@ function updateUI() {
     // Update Special registers (SP and PC are usually 16-bit addresses, so 4 digits)
     spLabel.text = `SP: ${toHex(cpu.registers[cpu.SP])}`;
     pcLabel.text = `PC: ${toHex(cpu.pc, 8)}`;
+
+    drawDisplay();
 }
 
 function startMachine() {
@@ -679,6 +771,7 @@ function resetMachine() {
     cpu.registers.fill(0);
     cpu.registers[15] = 0xFFFF; 
     cpu.ZF, cpu.SF, cpu.OF = 0;
+    cpu.framebuffer.fill(0);
     terminal.value = '--- System Reset ---\n';
     updateUI();
 }
