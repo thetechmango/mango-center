@@ -15,6 +15,10 @@ class CPU {
         this.OF = 0;
 
         this.framebuffer = new Uint8Array(128 * 64);
+        this.keyState = new Uint8Array(256);
+
+        this._boundKeyDown = null;
+        this._boundKeyUp = null;
 
         this.ops = new Array(256);
         this.initOps();
@@ -48,8 +52,13 @@ class CPU {
     initOps() {
         const I = INSTRUCTIONS;
 
-        const invalid = (opCode) => {
-            terminal.value += `Unknown opcode: 0x${opCode.toString(16).padStart(2, "0")}\n`;
+        const invalid = () => {
+            const bad = this.memory[this.pc - 1];
+        
+            terminal.value += `Unknown opcode: 0x${
+                bad !== undefined ? bad.toString(16).padStart(2, "0") : "??"
+            }\n`;
+        
             stopMachine?.();
         };
 
@@ -277,7 +286,17 @@ class CPU {
             terminal.el.scrollTop = terminal.el.scrollHeight;
         };
 
-        this.ops[I.DRAW.opcode] = () => {
+        this.ops[I.READKEY.opcode] = () => {
+            const mem = this.memory;
+        
+            const rDest = mem[this.pc++];
+            const keyCode = this.read32() & 0xFF;
+        
+            const state = this.keyState?.[keyCode] ?? 0;
+            this.writeReg(rDest, state);
+        };
+
+        this.ops[I.SETPIX.opcode] = () => {
             const mem = this.memory;
         
             const x = this.registers[mem[this.pc++]];
@@ -286,6 +305,20 @@ class CPU {
         
             if (x < WIDTH && y < HEIGHT) {
                 this.framebuffer[y * WIDTH + x] = c & 0xFF;
+            }
+        };
+
+        this.ops[I.GETPIX.opcode] = () => {
+            const mem = this.memory;
+        
+            const rDest = mem[this.pc++];
+            const x = this.registers[mem[this.pc++]];
+            const y = this.registers[mem[this.pc++]];
+        
+            if (x < WIDTH && y < HEIGHT) {
+                this.writeReg(rDest, this.framebuffer[y * WIDTH + x]);
+            } else {
+                this.writeReg(rDest, 0);
             }
         };
 
@@ -320,6 +353,45 @@ class CPU {
             }
         };
 
+        this.ops[I.LINE.opcode] = () => {
+            const mem = this.memory;
+        
+            let x0 = this.registers[mem[this.pc++]];
+            let y0 = this.registers[mem[this.pc++]];
+            let x1 = this.registers[mem[this.pc++]];
+            let y1 = this.registers[mem[this.pc++]];
+            const c = this.registers[mem[this.pc++]] & 0xFF;
+        
+            const dx = Math.abs(x1 - x0);
+            const sx = x0 < x1 ? 1 : -1;
+            const dy = -Math.abs(y1 - y0);
+            const sy = y0 < y1 ? 1 : -1;
+        
+            let err = dx + dy;
+        
+            const fb = this.framebuffer;
+        
+            while (true) {
+                if (x0 >= 0 && x0 < WIDTH && y0 >= 0 && y0 < HEIGHT) {
+                    fb[y0 * WIDTH + x0] = c;
+                }
+        
+                if (x0 === x1 && y0 === y1) break;
+        
+                const e2 = 2 * err;
+        
+                if (e2 >= dy) {
+                    err += dy;
+                    x0 += sx;
+                }
+        
+                if (e2 <= dx) {
+                    err += dx;
+                    y0 += sy;
+                }
+            }
+        };
+
         this.ops[I.HALT.opcode] = () => {
             stopMachine();
             terminal.value += '--- System Halted ---\n';
@@ -339,6 +411,24 @@ class CPU {
     
         op();
     }
+
+    attachInput() {
+        this._boundKeyDown = (e) => {
+            if (e.keyCode < 256) this.keyState[e.keyCode] = 1;
+        };
+
+        this._boundKeyUp = (e) => {
+            if (e.keyCode < 256) this.keyState[e.keyCode] = 0;
+        };
+
+        window.addEventListener("keydown", this._boundKeyDown);
+        window.addEventListener("keyup", this._boundKeyUp);
+    }
+
+    detachInput() {
+        window.removeEventListener("keydown", this._boundKeyDown);
+        window.removeEventListener("keyup", this._boundKeyUp);
+    }
 }
 
 let timerId = null;
@@ -353,35 +443,36 @@ const INSTRUCTIONS = {
     STORE:  { opcode: 0x12, args: ["reg", "val32"] }, // Store to memory
     MOV:    { opcode: 0x13, args: ["reg", "reg"] },   // Copy from one register to another
     LOADI:  { opcode: 0x14, args: ["reg", "reg"] },   // Load from the memory address in a register
-    LOADIB: { opcode: 0x16, args: ["reg", "reg"] },   // LOADI but load only one byte
-    STOREI: { opcode: 0x15, args: ["reg", "reg"] },   // Store to a memory address in a register
+    LOADIB: { opcode: 0x15, args: ["reg", "reg"] },   // LOADI but load only one byte
+    STOREI: { opcode: 0x16, args: ["reg", "reg"] },   // Store to a memory address in a register
 
     ADD: { opcode: 0x20, args: ["reg", "reg"] }, // Adds reg2 to reg1
     SUB: { opcode: 0x21, args: ["reg", "reg"] }, // Same as ADD but subtraction
     MUL: { opcode: 0x22, args: ["reg", "reg"] }, // ...
     DIV: { opcode: 0x23, args: ["reg", "reg"] },
-    MOD: { opcode: 0x2C, args: ["reg", "reg"] },
     AND: { opcode: 0x24, args: ["reg", "reg"] }, // reg1 = reg1 AND (bitwise) reg2
     OR:  { opcode: 0x25, args: ["reg", "reg"] }, // ...
     XOR: { opcode: 0x26, args: ["reg", "reg"] },
     NOT: { opcode: 0x27, args: ["reg"] },
-    NEG: { opcode: 0x2D, args: ["reg"] },        // Negation (two's compliment)
     INC: { opcode: 0x28, args: ["reg"] },        // Increments reg by 1
     DEC: { opcode: 0x29, args: ["reg"] },        // Decrements reg by 1
     SHL: { opcode: 0x2A, args: ["reg", "reg"] }, // Shifts bits of reg1 to the left by reg2 amount
     SHR: { opcode: 0x2B, args: ["reg", "reg"] }, // Same but to the right
+    MOD: { opcode: 0x2C, args: ["reg", "reg"] },
+    NEG: { opcode: 0x2D, args: ["reg"] },        // Negation (two's compliment)
 
     JMP: { opcode: 0x30, args: ["val32"] },      // Jump to a memory address (immediate)
-    JMPR: { opcode: 0x38, args: ["reg"] },       // Jump to a memory address in a register
-    JZ:  { opcode: 0x31, args: ["val32"] },      // Jump to a memory address if the zero flag is true
-    JNZ: { opcode: 0x32, args: ["val32"] },      // Same but only if zero flag is false
-    CMP: { opcode: 0x33, args: ["reg", "reg"] }, // Sets the zero flag (ZF), sign flag (SF), and overflow flag (OF). Use this before the comparison jumps
-    JG:  { opcode: 0x34, args: ["val32"] },      // Jump if CMP reg1 was greater than reg2
-    JL:  { opcode: 0x35, args: ["val32"] },      // Jump if CPM reg1 was less than reg2
-    JGE: { opcode: 0x36, args: ["val32"] },      // Same but greater than or equal to
-    JLE: { opcode: 0x37, args: ["val32"] },      // Same but less than or equal to
+    JMPR: { opcode: 0x31, args: ["reg"] },       // Jump to a memory address in a register
+    JZ:  { opcode: 0x32, args: ["val32"] },      // Jump to a memory address if the zero flag is true
+    JNZ: { opcode: 0x33, args: ["val32"] },      // Same but only if zero flag is false
+    CMP: { opcode: 0x34, args: ["reg", "reg"] }, // Sets the zero flag (ZF), sign flag (SF), and overflow flag (OF). Use this before the comparison jumps
+    JG:  { opcode: 0x35, args: ["val32"] },      // Jump if CMP reg1 was greater than reg2
+    JL:  { opcode: 0x36, args: ["val32"] },      // Jump if CPM reg1 was less than reg2
+    JGE: { opcode: 0x37, args: ["val32"] },      // Same but greater than or equal to
+    JLE: { opcode: 0x38, args: ["val32"] },      // Same but less than or equal to
 
     PRINT: { opcode: 0x40, args: ["reg"] },  // Prints the value of reg to the terminal in decimal
+    READKEY: { opcode: 0x41, args: ["reg", "val32"] }, // Gets the current state of the key with that keycode and puts either a 1 or 0 in reg
 
     PUSH:  { opcode: 0x70, args: ["reg"] },  // Decrement SP by 4, then write reg value to [SP]
     POP:   { opcode: 0x71, args: ["reg"] },  // Read value at [SP] into reg, then increment SP by 4
@@ -390,9 +481,11 @@ const INSTRUCTIONS = {
 
     RAND: { opcode: 0x80, args: ["reg"] },   // Sets reg to a random unsigned 32 bit integer
 
-    DRAW: { opcode: 0x90, args: ["reg", "reg", "reg"] }, // x, y, color
-    FILL: { opcode: 0x91, args: ["reg"] },               // color
-    RECT: { opcode: 0x92, args: ["reg", "reg", "reg", "reg", "reg"] }, // x, y, width, height, color
+    SETPIX: { opcode: 0x90, args: ["reg", "reg", "reg"] }, // x, y, color 0-255
+    GETPIX: { opcode: 0x91, args: ["reg", "reg", "reg"] }, // rDest, rX, rY
+    FILL: { opcode: 0x92, args: ["reg"] },                 // color
+    RECT: { opcode: 0x93, args: ["reg", "reg", "reg", "reg", "reg"] }, // x, y, width, height, color
+    LINE: { opcode: 0x94, args: ["reg","reg","reg","reg","reg"] }, // x1, y1, x2, y2, color
 
     HALT:  { opcode: 0xFF, args: [] }      // Halts the program until the user resumes
 };
@@ -457,13 +550,15 @@ function assemble(source) {
 }
 
 let cpu = new CPU(65536);
+cpu.attachInput();
 
 const initialProgramText = `; Example Assembly Program
-INC R0
-PRINT R0
-ADD R0, R0
-CMP R0, R1
-JNZ 0x01
+INC R1
+LOOP:
+PRINT R1
+ADD R1, R1
+CMP R1, R2
+JNZ LOOP
 HALT
 `;
 
@@ -523,7 +618,7 @@ for (let i = 0; i < regLabels.length; i += 4) {
 const spLabel = ui.label({ text: `SP: ${cpu.registers[cpu.SP]}` });
 const pcLabel = ui.label({ text: `PC: ${cpu.pc}` });
 
-const speedSlider = ui.slider({ value: 900, min: 10, max: 1000 });
+const speedSlider = ui.slider({ value: 900, min: 0, max: 999 });
 
 const runningLabel = ui.label({ text: 'Stopped' });
 const turboButton = ui.button({
@@ -691,20 +786,35 @@ const programPanel = ui.panel({ style: { width: '500px', height: '90%' } }, [
 programPanel.position('right', 10, 50);
 ui.mount(programPanel, document.body);
 
-const display = ui.el("canvas", { style: { width: '1024', height: '512' } });
+const WIDTH = 128;
+const HEIGHT = 64;
 
-const displayPanel = ui.panel({}, [
+const display = ui.el('canvas', {
+    style: { width: '512px', height: '256px' }
+});
+
+display.el.width = WIDTH;   // 128
+display.el.height = HEIGHT; // 64
+
+const ctx = display.el.getContext("2d");
+ctx.imageSmoothingEnabled = false;
+display.el.style.imageRendering = 'pixelated';
+
+display.el.addEventListener("click", async () => {
+    if (!document.fullscreenElement) {
+        await display.el.requestFullscreen();
+    } else {
+        await document.exitFullscreen();
+    }
+});
+
+const displayPanel = ui.panel({ style: { gap: "1px" } }, [
+    ui.label({ text: '128x64', style: { fontSize: '10px', color: '#666'}}),
     display
 ]);
 
 displayPanel.position('bottom', 10, 50);
 ui.mount(displayPanel, document.body);
-
-const WIDTH = 128;
-const HEIGHT = 64;
-
-const ctx = display.el.getContext("2d");
-ctx.imageSmoothingEnabled = false;
 
 const img = ctx.createImageData(WIDTH, HEIGHT);
 
@@ -805,7 +915,7 @@ function loop() {
     }
 
     updateUI();
-    timerId = setTimeout(loop, isTurbo ? 0 : 1010 - speedSlider.value);
+    timerId = setTimeout(loop, isTurbo ? 0 : 1000 - speedSlider.value);
 }
 
 loadButton.el.click();
