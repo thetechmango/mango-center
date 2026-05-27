@@ -15,6 +15,7 @@ class CPU {
         this.OF = 0;
 
         this.framebuffer = new Uint8Array(128 * 64);
+        this.needsPresent = false;
         this.keyState = new Uint8Array(256);
 
         this._boundKeyDown = null;
@@ -93,21 +94,21 @@ class CPU {
             this.writeReg(rDest, this.registers[rSrc]);
         };
 
-        this.ops[I.LOADI.opcode] = () => {
+        this.ops[I.LOADR.opcode] = () => {
             const mem = this.memory;
             const rDest = mem[this.pc++];
             const rPtr = mem[this.pc++];
             this.writeReg(rDest, this.memRead32(this.registers[rPtr]));
         };
 
-        this.ops[I.LOADIB.opcode] = () => {
+        this.ops[I.LOADRB.opcode] = () => {
             const mem = this.memory;
             const rDest = mem[this.pc++];
             const rPtr = mem[this.pc++];
             this.writeReg(rDest, this.memory[this.registers[rPtr]] >>> 0);
         };
 
-        this.ops[I.STOREI.opcode] = () => {
+        this.ops[I.STORER.opcode] = () => {
             const mem = this.memory;
             const rPtr = mem[this.pc++];
             const rSrc = mem[this.pc++];
@@ -322,6 +323,10 @@ class CPU {
             }
         };
 
+        this.ops[I.PRESENT.opcode] = () => {
+            this.needsPresent = true;
+        };
+
         this.ops[I.FILL.opcode] = () => {
             const mem = this.memory;
             const c = this.registers[mem[this.pc++]] & 0xFF;
@@ -438,13 +443,16 @@ let isTurbo = false;
 const INSTRUCTIONS = {
     NOP: { opcode: 0x00, args: [] },         // Does nothing (no operation)
 
-    LOAD:   { opcode: 0x10, args: ["reg", "val32"] }, // Load immediate
-    LOADM:  { opcode: 0x11, args: ["reg", "val32"] }, // Load from memory
-    STORE:  { opcode: 0x12, args: ["reg", "val32"] }, // Store to memory
-    MOV:    { opcode: 0x13, args: ["reg", "reg"] },   // Copy from one register to another
-    LOADI:  { opcode: 0x14, args: ["reg", "reg"] },   // Load from the memory address in a register
-    LOADIB: { opcode: 0x15, args: ["reg", "reg"] },   // LOADI but load only one byte
-    STOREI: { opcode: 0x16, args: ["reg", "reg"] },   // Store to a memory address in a register
+    LOAD:   { opcode: 0x10, args: ["reg", "val32"] }, // Rdest = imm32 (load 32-bit immediate into register)
+
+    LOADM:  { opcode: 0x11, args: ["reg", "val32"] }, // Rdest = [addr] (read 32-bit value from memory at immediate address)
+    LOADR:  { opcode: 0x12, args: ["reg", "reg"] },   // Rdest = [Rptr] (read 32-bit value from memory at address in register)
+    LOADRB: { opcode: 0x13, args: ["reg", "reg"] },   // Rdest = byte[Rptr] (read 8-bit value, zero-extended to 32-bit)
+
+    STORE:  { opcode: 0x14, args: ["reg", "val32"] }, // [addr] = Rsrc (write 32-bit register value to memory at immediate address)
+    STORER: { opcode: 0x15, args: ["reg", "reg"] },   // [Rptr] = Rsrc (write 32-bit register value to memory at address in register)
+
+    MOV:    { opcode: 0x16, args: ["reg", "reg"] },   // Rdest = Rsrc (copy value between registers)
 
     ADD: { opcode: 0x20, args: ["reg", "reg"] }, // Adds reg2 to reg1
     SUB: { opcode: 0x21, args: ["reg", "reg"] }, // Same as ADD but subtraction
@@ -483,9 +491,10 @@ const INSTRUCTIONS = {
 
     SETPIX: { opcode: 0x90, args: ["reg", "reg", "reg"] }, // x, y, color 0-255
     GETPIX: { opcode: 0x91, args: ["reg", "reg", "reg"] }, // rDest, rX, rY
-    FILL: { opcode: 0x92, args: ["reg"] },                 // color
-    RECT: { opcode: 0x93, args: ["reg", "reg", "reg", "reg", "reg"] }, // x, y, width, height, color
-    LINE: { opcode: 0x94, args: ["reg","reg","reg","reg","reg"] }, // x1, y1, x2, y2, color
+    PRESENT: { opcode: 0x92, args: [] }, // Update the display with the contents of the framebuffer
+    FILL: { opcode: 0x93, args: ["reg"] },                 // color
+    RECT: { opcode: 0x94, args: ["reg", "reg", "reg", "reg", "reg"] }, // x, y, width, height, color
+    LINE: { opcode: 0x95, args: ["reg","reg","reg","reg","reg"] },     // x1, y1, x2, y2, color
 
     HALT:  { opcode: 0xFF, args: [] }      // Halts the program until the user resumes
 };
@@ -605,8 +614,12 @@ Object.assign(ui.defaults.button, {
 })
 
 const regLabels = Array.from(
-    { length: cpu.registers.length - 1 }, 
-    (_, i) => ui.label({ text: `R${i}: 0x00`, style: { minWidth: '70px' } })
+    { length: cpu.registers.length - 1 },
+    (_, i) => {
+        const r = i + 1;
+        const name = (r === cpu.SP) ? "SP" : `R${r}`;
+        return ui.label({ text: `${name}: 0x00`, style: { minWidth: '70px' } });
+    }
 );
 
 // Helper to chunk labels into rows so they don't overflow the screen
@@ -615,10 +628,14 @@ for (let i = 0; i < regLabels.length; i += 4) {
     regRows.push(ui.row({ style: { gap: '10px' } }, regLabels.slice(i, i + 4)));
 }
 
-const spLabel = ui.label({ text: `SP: ${cpu.registers[cpu.SP]}` });
 const pcLabel = ui.label({ text: `PC: ${cpu.pc}` });
 
-const speedSlider = ui.slider({ value: 900, min: 0, max: 999 });
+const speedSlider = ui.slider({ value: 500, min: 0, max: 1000 });
+
+function getDelay() {
+    const t = speedSlider.value / 1000;
+    return 1000 * Math.pow(1 - t, 3);
+}
 
 const runningLabel = ui.label({ text: 'Stopped' });
 const turboButton = ui.button({
@@ -632,13 +649,12 @@ const turboButton = ui.button({
 const dashboard = ui.panel({}, [
     ui.label({ text: 'Registers'}),
     ...regRows,
-    ui.row({}, [spLabel, pcLabel]),
 
     ui.divider(),
 
-    ui.row({}, [
-        runningLabel
-    ]),
+    
+    ui.row({}, [pcLabel]),
+    ui.row({}, [runningLabel]),
 
     ui.row({}, [
         ui.button({ text: 'Resume', onclick: () => {
@@ -836,16 +852,20 @@ function drawDisplay() {
 }
 
 function updateUI() {
-    // Update general registers in Hex
+    // Update general registers in hex
     regLabels.forEach((label, i) => {
-        label.text = `R${i}: ${toHex(cpu.registers[i])}`;
+        const r = i + 1;
+        const name = (r === cpu.SP) ? "SP" : `R${r}`;
+        label.text = `${name}: ${toHex(cpu.registers[r])}`;
     });
 
-    // Update Special registers (SP and PC are usually 16-bit addresses, so 4 digits)
-    spLabel.text = `SP: ${toHex(cpu.registers[cpu.SP])}`;
-    pcLabel.text = `PC: ${toHex(cpu.pc, 8)}`;
+    // Update PC
+    pcLabel.text = `PC: ${toHex(cpu.pc, 8)}`
 
-    drawDisplay();
+    if (cpu.needsPresent) {
+        drawDisplay();
+        cpu.needsPresent = false;
+    }
 }
 
 function startMachine() {
@@ -884,9 +904,10 @@ function resetMachine() {
     cpu.framebuffer.fill(0);
     terminal.value = '--- System Reset ---\n';
     updateUI();
+    drawDisplay();
 }
 
-const turboBatchSize = 1000;
+const turboBatchSize = 10000;
 
 function loop() {
     if (!isRunning) return;
@@ -915,7 +936,8 @@ function loop() {
     }
 
     updateUI();
-    timerId = setTimeout(loop, isTurbo ? 0 : 1000 - speedSlider.value);
+    timerId = setTimeout(loop, isTurbo ? 0 : getDelay());
 }
 
 loadButton.el.click();
+drawDisplay();
