@@ -18,11 +18,37 @@ class CPU {
         this.needsPresent = false;
         this.keyState = new Uint8Array(256);
 
+        this.sleepUntil = 0;
+
+        this.audioCtx = null;
+
         this._boundKeyDown = null;
         this._boundKeyUp = null;
 
         this.ops = new Array(256);
         this.initOps();
+    }
+
+    readArg() {
+        const type = this.memory[this.pc++];
+    
+        if (type === 0) { // register
+            const r = this.memory[this.pc++];
+            return this.registers[r];
+        } else { // immediate
+            return this.read32();
+        }
+    }
+    
+    readArgRaw() {
+        const type = this.memory[this.pc++];
+    
+        if (type === 0) { // register
+            return this.memory[this.pc++]; // return register index
+        } else {
+            // immediate cannot be a destination
+            throw new Error("Immediate not allowed as destination");
+        }
     }
 
     read32() {
@@ -52,351 +78,298 @@ class CPU {
 
     initOps() {
         const I = INSTRUCTIONS;
-
+    
         const invalid = () => {
             const bad = this.memory[this.pc - 1];
-        
             terminal.value += `Unknown opcode: 0x${
                 bad !== undefined ? bad.toString(16).padStart(2, "0") : "??"
             }\n`;
-        
             stopMachine?.();
         };
-
+    
         this.ops.fill(invalid);
-
+    
+        // --- Basic ---
         this.ops[I.NOP.opcode] = () => {};
-
-        this.ops[I.LOAD.opcode] = () => {
-            const mem = this.memory;
-            const r = mem[this.pc++];
-            this.writeReg(r, this.read32());
+    
+        // --- Data / Memory ---
+        this.ops[I.MOV.opcode] = () => {
+            const r = this.readArgRaw();
+            this.writeReg(r, this.readArg());
         };
-
-        this.ops[I.LOADM.opcode] = () => {
-            const mem = this.memory;
-            const r = mem[this.pc++];
-            const addr = this.read32();
+    
+        this.ops[I.LOAD.opcode] = () => {
+            const r = this.readArgRaw();
+            const addr = this.readArg();
             this.writeReg(r, this.memRead32(addr));
         };
-
+    
+        this.ops[I.LOADB.opcode] = () => {
+            const r = this.readArgRaw();
+            const addr = this.readArg();
+            this.writeReg(r, this.memory[addr] >>> 0);
+        };
+    
         this.ops[I.STORE.opcode] = () => {
-            const mem = this.memory;
-            const r = mem[this.pc++];
-            const addr = this.read32();
-            this.memWrite32(addr, this.registers[r]);
+            const addr = this.readArg();
+            const val  = this.readArg();
+            this.memWrite32(addr, val);
         };
-
-        this.ops[I.MOV.opcode] = () => {
-            const mem = this.memory;
-            const rDest = mem[this.pc++];
-            const rSrc = mem[this.pc++];
-            this.writeReg(rDest, this.registers[rSrc]);
-        };
-
-        this.ops[I.LOADR.opcode] = () => {
-            const mem = this.memory;
-            const rDest = mem[this.pc++];
-            const rPtr = mem[this.pc++];
-            this.writeReg(rDest, this.memRead32(this.registers[rPtr]));
-        };
-
-        this.ops[I.LOADRB.opcode] = () => {
-            const mem = this.memory;
-            const rDest = mem[this.pc++];
-            const rPtr = mem[this.pc++];
-            this.writeReg(rDest, this.memory[this.registers[rPtr]] >>> 0);
-        };
-
-        this.ops[I.STORER.opcode] = () => {
-            const mem = this.memory;
-            const rPtr = mem[this.pc++];
-            const rSrc = mem[this.pc++];
-            this.memWrite32(this.registers[rPtr], this.registers[rSrc]);
-        };
-
+    
+        // --- Arithmetic ---
         this.ops[I.ADD.opcode] = () => {
-            const mem = this.memory;
-            const rA = mem[this.pc++], rB = mem[this.pc++];
-            this.writeReg(rA, this.registers[rA] + this.registers[rB]);
+            const r = this.readArgRaw();
+            this.writeReg(r, this.registers[r] + this.readArg());
         };
-
+    
         this.ops[I.SUB.opcode] = () => {
-            const mem = this.memory;
-            const rA = mem[this.pc++], rB = mem[this.pc++];
-            this.writeReg(rA, this.registers[rA] - this.registers[rB]);
+            const r = this.readArgRaw();
+            this.writeReg(r, this.registers[r] - this.readArg());
         };
-
+    
         this.ops[I.MUL.opcode] = () => {
-            const mem = this.memory;
-            const rA = mem[this.pc++], rB = mem[this.pc++];
-            this.writeReg(rA, this.registers[rA] * this.registers[rB]);
+            const r = this.readArgRaw();
+            this.writeReg(r, this.registers[r] * this.readArg());
         };
-
+    
         this.ops[I.DIV.opcode] = () => {
-            const mem = this.memory;
-            const rA = mem[this.pc++], rB = mem[this.pc++];
-            this.writeReg(rA, Math.floor(this.registers[rA] / this.registers[rB]));
+            const r = this.readArgRaw();
+            this.writeReg(r, Math.floor(this.registers[r] / this.readArg()));
         };
-
+    
         this.ops[I.MOD.opcode] = () => {
-            const mem = this.memory;
-            const rA = mem[this.pc++], rB = mem[this.pc++];
-            this.writeReg(rA, this.registers[rA] % this.registers[rB]);
+            const r = this.readArgRaw();
+            this.writeReg(r, this.registers[r] % this.readArg());
         };
-
-        this.ops[I.INC.opcode] = () => {
-            const mem = this.memory;
-            const r = mem[this.pc++];
-            this.writeReg(r, this.registers[r] + 1);
-        };
-
-        this.ops[I.DEC.opcode] = () => {
-            const mem = this.memory;
-            const r = mem[this.pc++];
-            this.writeReg(r, this.registers[r] - 1);
-        };
-
+    
         this.ops[I.AND.opcode] = () => {
-            const mem = this.memory;
-            const rA = mem[this.pc++], rB = mem[this.pc++];
-            this.writeReg(rA, this.registers[rA] & this.registers[rB]);
+            const r = this.readArgRaw();
+            this.writeReg(r, this.registers[r] & this.readArg());
         };
-
+    
         this.ops[I.OR.opcode] = () => {
-            const mem = this.memory;
-            const rA = mem[this.pc++], rB = mem[this.pc++];
-            this.writeReg(rA, this.registers[rA] | this.registers[rB]);
+            const r = this.readArgRaw();
+            this.writeReg(r, this.registers[r] | this.readArg());
         };
-
+    
         this.ops[I.XOR.opcode] = () => {
-            const mem = this.memory;
-            const rA = mem[this.pc++], rB = mem[this.pc++];
-            this.writeReg(rA, this.registers[rA] ^ this.registers[rB]);
+            const r = this.readArgRaw();
+            this.writeReg(r, this.registers[r] ^ this.readArg());
         };
-
+    
         this.ops[I.NOT.opcode] = () => {
-            const mem = this.memory;
-            const r = mem[this.pc++];
+            const r = this.readArgRaw();
             this.writeReg(r, ~this.registers[r]);
         };
-
+    
         this.ops[I.NEG.opcode] = () => {
-            const mem = this.memory;
-            const r = mem[this.pc++];
+            const r = this.readArgRaw();
             this.writeReg(r, -this.registers[r]);
         };
-
+    
+        this.ops[I.INC.opcode] = () => {
+            const r = this.readArgRaw();
+            this.writeReg(r, this.registers[r] + 1);
+        };
+    
+        this.ops[I.DEC.opcode] = () => {
+            const r = this.readArgRaw();
+            this.writeReg(r, this.registers[r] - 1);
+        };
+    
         this.ops[I.SHL.opcode] = () => {
-            const mem = this.memory;
-            const rA = mem[this.pc++], rB = mem[this.pc++];
-            this.writeReg(rA, this.registers[rA] << this.registers[rB]);
+            const r = this.readArgRaw();
+            this.writeReg(r, this.registers[r] << this.readArg());
         };
-
+    
         this.ops[I.SHR.opcode] = () => {
-            const mem = this.memory;
-            const rA = mem[this.pc++], rB = mem[this.pc++];
-            this.writeReg(rA, this.registers[rA] >>> this.registers[rB]);
+            const r = this.readArgRaw();
+            this.writeReg(r, this.registers[r] >>> this.readArg());
         };
-
+    
+        // --- Compare ---
         this.ops[I.CMP.opcode] = () => {
-            const mem = this.memory;
-            const rA = this.registers[mem[this.pc++]] | 0;
-            const rB = this.registers[mem[this.pc++]] | 0;
-            const res = (rA - rB) | 0;
-
-            this.ZF = (res === 0) ? 1 : 0;
-            this.SF = (res < 0) ? 1 : 0;
-            this.OF = ((rA ^ res) & (rB ^ rA) & 0x80000000) ? 1 : 0;
+            const a = this.readArg() | 0;
+            const b = this.readArg() | 0;
+            const res = (a - b) | 0;
+    
+            this.ZF = res === 0 ? 1 : 0;
+            this.SF = res < 0 ? 1 : 0;
+            this.OF = ((a ^ res) & (b ^ a) & 0x80000000) ? 1 : 0;
         };
-
-        this.ops[I.JMP.opcode] = () => { this.pc = this.read32(); };
-
-        this.ops[I.JMPR.opcode] = () => {
-            const mem = this.memory;
-            const r = mem[this.pc++];
-            this.pc = this.registers[r] >>> 0;
+    
+        // --- Jumps ---
+        this.ops[I.JMP.opcode] = () => {
+            this.pc = this.readArg();
         };
-
+    
         this.ops[I.JZ.opcode] = () => {
-            const addr = this.read32();
-            if (this.ZF === 1) this.pc = addr;
+            const t = this.readArg();
+            if (this.ZF) this.pc = t;
         };
-
+    
         this.ops[I.JNZ.opcode] = () => {
-            const addr = this.read32();
-            if (this.ZF === 0) this.pc = addr;
+            const t = this.readArg();
+            if (!this.ZF) this.pc = t;
         };
-
+    
         this.ops[I.JG.opcode] = () => {
-            const addr = this.read32();
-            if (this.ZF === 0 && this.SF === this.OF) this.pc = addr;
+            const t = this.readArg();
+            if (!this.ZF && this.SF === this.OF) this.pc = t;
         };
-
+    
         this.ops[I.JL.opcode] = () => {
-            const addr = this.read32();
-            if (this.SF !== this.OF) this.pc = addr;
+            const t = this.readArg();
+            if (this.SF !== this.OF) this.pc = t;
         };
-
+    
         this.ops[I.JGE.opcode] = () => {
-            const addr = this.read32();
-            if (this.SF === this.OF) this.pc = addr;
+            const t = this.readArg();
+            if (this.SF === this.OF) this.pc = t;
         };
-
+    
         this.ops[I.JLE.opcode] = () => {
-            const addr = this.read32();
-            if (this.ZF === 1 || this.SF !== this.OF) this.pc = addr;
+            const t = this.readArg();
+            if (this.ZF || this.SF !== this.OF) this.pc = t;
         };
-
+    
+        // --- Stack ---
         this.ops[I.PUSH.opcode] = () => {
-            const mem = this.memory;
-            const r = mem[this.pc++];
+            const v = this.readArg();
             this.registers[this.SP] -= 4;
-            this.memWrite32(this.registers[this.SP], this.registers[r]);
+            this.memWrite32(this.registers[this.SP], v);
         };
-
+    
         this.ops[I.POP.opcode] = () => {
-            const mem = this.memory;
-            const r = mem[this.pc++];
+            const r = this.readArgRaw();
             this.writeReg(r, this.memRead32(this.registers[this.SP]));
             this.registers[this.SP] += 4;
         };
-
+    
         this.ops[I.CALL.opcode] = () => {
-            const target = this.read32();
+            const t = this.readArg();
             this.registers[this.SP] -= 4;
             this.memWrite32(this.registers[this.SP], this.pc);
-            this.pc = target;
+            this.pc = t;
         };
-
+    
         this.ops[I.RET.opcode] = () => {
             this.pc = this.memRead32(this.registers[this.SP]);
             this.registers[this.SP] += 4;
         };
-
+    
+        // --- Misc ---
         this.ops[I.RAND.opcode] = () => {
-            const mem = this.memory;
-            const r = mem[this.pc++];
+            const r = this.readArgRaw();
             this.writeReg(r, (Math.random() * 0x100000000) >>> 0);
         };
-
+    
         this.ops[I.PRINT.opcode] = () => {
-            const mem = this.memory;
-            const val = this.registers[mem[this.pc++]];
-            terminal.value += val + '\n';
+            const v = this.readArg();
+            terminal.value += v + '\n';
             terminal.el.scrollTop = terminal.el.scrollHeight;
         };
-
-        this.ops[I.READKEY.opcode] = () => {
-            const mem = this.memory;
-        
-            const rDest = mem[this.pc++];
-            const keyCode = this.read32() & 0xFF;
-        
-            const state = this.keyState?.[keyCode] ?? 0;
-            this.writeReg(rDest, state);
+    
+        this.ops[I.SLEEP.opcode] = () => {
+            const ms = this.readArg();
+            this.sleepUntil = performance.now() + ms;
         };
 
+        this.ops[I.BEEP.opcode] = () => {
+            const freq = this.readArg();
+            const duration = this.readArg();
+        
+            if (freq > 0 && duration > 0) {
+                this.beep(freq, duration);
+            }
+        };
+    
+        this.ops[I.READKEY.opcode] = () => {
+            const r = this.readArgRaw();
+            const key = this.readArg() & 0xFF;
+            this.writeReg(r, this.keyState[key] ?? 0);
+        };
+    
+        // --- Graphics ---
         this.ops[I.SETPIX.opcode] = () => {
-            const mem = this.memory;
-        
-            const x = this.registers[mem[this.pc++]];
-            const y = this.registers[mem[this.pc++]];
-            const c = this.registers[mem[this.pc++]];
-        
+            const x = this.readArg();
+            const y = this.readArg();
+            const c = this.readArg();
+    
             if (x < WIDTH && y < HEIGHT) {
                 this.framebuffer[y * WIDTH + x] = c & 0xFF;
             }
         };
-
+    
         this.ops[I.GETPIX.opcode] = () => {
-            const mem = this.memory;
-        
-            const rDest = mem[this.pc++];
-            const x = this.registers[mem[this.pc++]];
-            const y = this.registers[mem[this.pc++]];
-        
+            const r = this.readArgRaw();
+            const x = this.readArg();
+            const y = this.readArg();
+    
             if (x < WIDTH && y < HEIGHT) {
-                this.writeReg(rDest, this.framebuffer[y * WIDTH + x]);
+                this.writeReg(r, this.framebuffer[y * WIDTH + x]);
             } else {
-                this.writeReg(rDest, 0);
+                this.writeReg(r, 0);
             }
         };
-
+    
         this.ops[I.PRESENT.opcode] = () => {
             this.needsPresent = true;
         };
-
+    
         this.ops[I.FILL.opcode] = () => {
-            const mem = this.memory;
-            const c = this.registers[mem[this.pc++]] & 0xFF;
-        
+            const c = this.readArg() & 0xFF;
             this.framebuffer.fill(c);
         };
-
+    
         this.ops[I.RECT.opcode] = () => {
-            const mem = this.memory;
-        
-            const x = this.registers[mem[this.pc++]];
-            const y = this.registers[mem[this.pc++]];
-            const w = this.registers[mem[this.pc++]];
-            const h = this.registers[mem[this.pc++]];
-            const c = this.registers[mem[this.pc++]] & 0xFF;
-        
-            const fb = this.framebuffer;
-        
+            const x = this.readArg();
+            const y = this.readArg();
+            const w = this.readArg();
+            const h = this.readArg();
+            const c = this.readArg() & 0xFF;
+    
             for (let yy = 0; yy < h; yy++) {
                 const py = y + yy;
                 if (py >= HEIGHT) break;
-        
+    
                 for (let xx = 0; xx < w; xx++) {
                     const px = x + xx;
                     if (px >= WIDTH) break;
-        
-                    fb[py * WIDTH + px] = c;
+    
+                    this.framebuffer[py * WIDTH + px] = c;
                 }
             }
         };
-
+    
         this.ops[I.LINE.opcode] = () => {
-            const mem = this.memory;
-        
-            let x0 = this.registers[mem[this.pc++]];
-            let y0 = this.registers[mem[this.pc++]];
-            let x1 = this.registers[mem[this.pc++]];
-            let y1 = this.registers[mem[this.pc++]];
-            const c = this.registers[mem[this.pc++]] & 0xFF;
-        
+            let x0 = this.readArg();
+            let y0 = this.readArg();
+            let x1 = this.readArg();
+            let y1 = this.readArg();
+            const c = this.readArg() & 0xFF;
+    
             const dx = Math.abs(x1 - x0);
             const sx = x0 < x1 ? 1 : -1;
             const dy = -Math.abs(y1 - y0);
             const sy = y0 < y1 ? 1 : -1;
-        
+    
             let err = dx + dy;
-        
-            const fb = this.framebuffer;
-        
+    
             while (true) {
                 if (x0 >= 0 && x0 < WIDTH && y0 >= 0 && y0 < HEIGHT) {
-                    fb[y0 * WIDTH + x0] = c;
+                    this.framebuffer[y0 * WIDTH + x0] = c;
                 }
-        
+    
                 if (x0 === x1 && y0 === y1) break;
-        
+    
                 const e2 = 2 * err;
-        
-                if (e2 >= dy) {
-                    err += dy;
-                    x0 += sx;
-                }
-        
-                if (e2 <= dx) {
-                    err += dx;
-                    y0 += sy;
-                }
+    
+                if (e2 >= dy) { err += dy; x0 += sx; }
+                if (e2 <= dx) { err += dx; y0 += sy; }
             }
         };
-
+    
         this.ops[I.HALT.opcode] = () => {
             stopMachine();
             terminal.value += '--- System Halted ---\n';
@@ -434,6 +407,30 @@ class CPU {
         window.removeEventListener("keydown", this._boundKeyDown);
         window.removeEventListener("keyup", this._boundKeyUp);
     }
+
+    beep(freq, duration) {
+        if (!this.audioCtx) {
+            this.audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+        }
+    
+        const ctx = this.audioCtx;
+    
+        const osc = ctx.createOscillator();
+        const gain = ctx.createGain();
+    
+        osc.type = "square"; // retro feel
+        osc.frequency.value = freq;
+    
+        gain.gain.value = 0.1; // volume
+    
+        osc.connect(gain);
+        gain.connect(ctx.destination);
+    
+        const now = ctx.currentTime;
+    
+        osc.start(now);
+        osc.stop(now + duration / 1000);
+    }
 }
 
 let timerId = null;
@@ -441,62 +438,60 @@ let isRunning = false;
 let isTurbo = false; 
 
 const INSTRUCTIONS = {
-    NOP: { opcode: 0x00, args: [] },         // Does nothing (no operation)
+    NOP: { opcode: 0x00, args: [] },
 
-    LOAD:   { opcode: 0x10, args: ["reg", "val32"] }, // Rdest = imm32 (load 32-bit immediate into register)
+    // Data / memory
+    MOV:    { opcode: 0x10, args: ["dst", "any"] },   // Rdst = value
+    LOAD:   { opcode: 0x11, args: ["dst", "any"] },   // Rdst = [addr]
+    LOADB:  { opcode: 0x12, args: ["dst", "any"] },   // Rdst = byte[addr]
+    STORE:  { opcode: 0x13, args: ["any", "any"] },   // [addr] = value
 
-    LOADM:  { opcode: 0x11, args: ["reg", "val32"] }, // Rdest = [addr] (read 32-bit value from memory at immediate address)
-    LOADR:  { opcode: 0x12, args: ["reg", "reg"] },   // Rdest = [Rptr] (read 32-bit value from memory at address in register)
-    LOADRB: { opcode: 0x13, args: ["reg", "reg"] },   // Rdest = byte[Rptr] (read 8-bit value, zero-extended to 32-bit)
+    // Arithmetic / logic
+    ADD: { opcode: 0x20, args: ["dst", "any"] },
+    SUB: { opcode: 0x21, args: ["dst", "any"] },
+    MUL: { opcode: 0x22, args: ["dst", "any"] },
+    DIV: { opcode: 0x23, args: ["dst", "any"] },
+    AND: { opcode: 0x24, args: ["dst", "any"] },
+    OR:  { opcode: 0x25, args: ["dst", "any"] },
+    XOR: { opcode: 0x26, args: ["dst", "any"] },
+    NOT: { opcode: 0x27, args: ["dst"] },
+    INC: { opcode: 0x28, args: ["dst"] },
+    DEC: { opcode: 0x29, args: ["dst"] },
+    SHL: { opcode: 0x2A, args: ["dst", "any"] },
+    SHR: { opcode: 0x2B, args: ["dst", "any"] },
+    MOD: { opcode: 0x2C, args: ["dst", "any"] },
+    NEG: { opcode: 0x2D, args: ["dst"] },
 
-    STORE:  { opcode: 0x14, args: ["reg", "val32"] }, // [addr] = Rsrc (write 32-bit register value to memory at immediate address)
-    STORER: { opcode: 0x15, args: ["reg", "reg"] },   // [Rptr] = Rsrc (write 32-bit register value to memory at address in register)
+    CMP: { opcode: 0x30, args: ["any", "any"] },
 
-    MOV:    { opcode: 0x16, args: ["reg", "reg"] },   // Rdest = Rsrc (copy value between registers)
+    JMP: { opcode: 0x31, args: ["any"] },
+    JZ:  { opcode: 0x32, args: ["any"] },
+    JNZ: { opcode: 0x33, args: ["any"] },
+    JG:  { opcode: 0x34, args: ["any"] },
+    JL:  { opcode: 0x35, args: ["any"] },
+    JGE: { opcode: 0x36, args: ["any"] },
+    JLE: { opcode: 0x37, args: ["any"] },
 
-    ADD: { opcode: 0x20, args: ["reg", "reg"] }, // Adds reg2 to reg1
-    SUB: { opcode: 0x21, args: ["reg", "reg"] }, // Same as ADD but subtraction
-    MUL: { opcode: 0x22, args: ["reg", "reg"] }, // ...
-    DIV: { opcode: 0x23, args: ["reg", "reg"] },
-    AND: { opcode: 0x24, args: ["reg", "reg"] }, // reg1 = reg1 AND (bitwise) reg2
-    OR:  { opcode: 0x25, args: ["reg", "reg"] }, // ...
-    XOR: { opcode: 0x26, args: ["reg", "reg"] },
-    NOT: { opcode: 0x27, args: ["reg"] },
-    INC: { opcode: 0x28, args: ["reg"] },        // Increments reg by 1
-    DEC: { opcode: 0x29, args: ["reg"] },        // Decrements reg by 1
-    SHL: { opcode: 0x2A, args: ["reg", "reg"] }, // Shifts bits of reg1 to the left by reg2 amount
-    SHR: { opcode: 0x2B, args: ["reg", "reg"] }, // Same but to the right
-    MOD: { opcode: 0x2C, args: ["reg", "reg"] },
-    NEG: { opcode: 0x2D, args: ["reg"] },        // Negation (two's compliment)
+    PUSH: { opcode: 0x40, args: ["any"] },
+    POP:  { opcode: 0x41, args: ["dst"] },
+    CALL: { opcode: 0x42, args: ["any"] },
+    RET:  { opcode: 0x43, args: [] },
 
-    JMP: { opcode: 0x30, args: ["val32"] },      // Jump to a memory address (immediate)
-    JMPR: { opcode: 0x31, args: ["reg"] },       // Jump to a memory address in a register
-    JZ:  { opcode: 0x32, args: ["val32"] },      // Jump to a memory address if the zero flag is true
-    JNZ: { opcode: 0x33, args: ["val32"] },      // Same but only if zero flag is false
-    CMP: { opcode: 0x34, args: ["reg", "reg"] }, // Sets the zero flag (ZF), sign flag (SF), and overflow flag (OF). Use this before the comparison jumps
-    JG:  { opcode: 0x35, args: ["val32"] },      // Jump if CMP reg1 was greater than reg2
-    JL:  { opcode: 0x36, args: ["val32"] },      // Jump if CPM reg1 was less than reg2
-    JGE: { opcode: 0x37, args: ["val32"] },      // Same but greater than or equal to
-    JLE: { opcode: 0x38, args: ["val32"] },      // Same but less than or equal to
+    PRINT:   { opcode: 0x50, args: ["any"] },
+    READKEY: { opcode: 0x51, args: ["dst", "any"] },
+    SLEEP:   { opcode: 0x52, args: ["any"] },
+    BEEP:    { opcode: 0x53, args: ["any", "any"] }, // freq Hz, duration ms
 
-    PRINT: { opcode: 0x40, args: ["reg"] },  // Prints the value of reg to the terminal in decimal
-    READKEY: { opcode: 0x41, args: ["reg", "val32"] }, // Gets the current state of the key with that keycode and puts either a 1 or 0 in reg
+    RAND: { opcode: 0x60, args: ["dst"] },
 
-    PUSH:  { opcode: 0x70, args: ["reg"] },  // Decrement SP by 4, then write reg value to [SP]
-    POP:   { opcode: 0x71, args: ["reg"] },  // Read value at [SP] into reg, then increment SP by 4
-    CALL: { opcode: 0x72, args: ["val32"] }, // PUSH current Program Counter (PC), then JMP to val32 in memory
-    RET:   { opcode: 0x73, args: [] },       // POP value from stack into PC (returns to after the CALL)
+    SETPIX: { opcode: 0x70, args: ["any", "any", "any"] },
+    GETPIX: { opcode: 0x71, args: ["dst", "any", "any"] },
+    PRESENT:{ opcode: 0x72, args: [] },
+    FILL:   { opcode: 0x73, args: ["any"] },
+    RECT:   { opcode: 0x74, args: ["any","any","any","any","any"] },
+    LINE:   { opcode: 0x75, args: ["any","any","any","any","any"] },
 
-    RAND: { opcode: 0x80, args: ["reg"] },   // Sets reg to a random unsigned 32 bit integer
-
-    SETPIX: { opcode: 0x90, args: ["reg", "reg", "reg"] }, // x, y, color 0-255
-    GETPIX: { opcode: 0x91, args: ["reg", "reg", "reg"] }, // rDest, rX, rY
-    PRESENT: { opcode: 0x92, args: [] }, // Update the display with the contents of the framebuffer
-    FILL: { opcode: 0x93, args: ["reg"] },                 // color
-    RECT: { opcode: 0x94, args: ["reg", "reg", "reg", "reg", "reg"] }, // x, y, width, height, color
-    LINE: { opcode: 0x95, args: ["reg","reg","reg","reg","reg"] },     // x1, y1, x2, y2, color
-
-    HALT:  { opcode: 0xFF, args: [] }      // Halts the program until the user resumes
+    HALT: { opcode: 0xFF, args: [] }
 };
 
 const toHex = (val, size = 8) => '0x' + val.toString(16).toUpperCase().padStart(size, '0');
@@ -506,52 +501,61 @@ function assemble(source) {
     const labels = {};
     const output = [];
 
-    const reg = (n) => parseInt(n.substring(1));
     const val = (x) => {
         if (labels[x] !== undefined) return labels[x];
-        const s = x.toString().toLowerCase();
+        const s = x.toLowerCase();
         if (s.startsWith("0x")) return parseInt(s.slice(2), 16);
         if (s.startsWith("$")) return parseInt(s.slice(1), 16);
         return parseInt(x);
     };
 
-    // Helper to calculate byte size of an instruction
-    const getInstrSize = (instr) => {
-        return 1 + instr.args.reduce((acc, arg) => acc + (arg === "reg" ? 1 : 4), 0);
-    };
+    function encodeArg(p) {
+        if (p.startsWith("R")) {
+            return [0, parseInt(p.slice(1))];
+        } else {
+            const v = val(p);
+            return [1, v & 0xFF, (v>>8)&0xFF, (v>>16)&0xFF, (v>>24)&0xFF];
+        }
+    }
 
-    // PASS 1: Labels
+    function sizeOf(parts, instr) {
+        let size = 1;
+        instr.args.forEach((_, i) => {
+            const p = parts[i + 1];
+            size += p.startsWith("R") ? 2 : 5;
+        });
+        return size;
+    }
+
+    // PASS 1
     let pc = 0;
     for (let raw of lines) {
         let line = raw.trim();
-        if (line === "" || line.startsWith(";")) continue;
+        if (!line || line.startsWith(";")) continue;
+
         if (line.endsWith(":")) {
             labels[line.slice(0, -1)] = pc;
             continue;
         }
-        const mnemonic = line.split(/[\s,]+/)[0].toUpperCase();
-        pc += getInstrSize(INSTRUCTIONS[mnemonic]);
-    }
-
-    // PASS 2: Emission
-    for (let raw of lines) {
-        let line = raw.trim();
-        if (line === "" || line.startsWith(";") || line.endsWith(":")) continue;
 
         const parts = line.split(/[\s,]+/);
-        const mnemonic = parts[0].toUpperCase();
-        const instr = INSTRUCTIONS[mnemonic];
+        pc += sizeOf(parts, INSTRUCTIONS[parts[0].toUpperCase()]);
+    }
+
+    // PASS 2
+    for (let raw of lines) {
+        let line = raw.trim();
+        if (!line || line.startsWith(";") || line.endsWith(":")) continue;
+
+        const parts = line.split(/[\s,]+/);
+        const instr = INSTRUCTIONS[parts[0].toUpperCase()];
+
+        if (!instr) throw new Error(`Unknown instruction: ${parts[0]}`);
 
         output.push(instr.opcode);
 
-        instr.args.forEach((argType, i) => {
-            const param = parts[i + 1];
-            if (argType === "reg") {
-                output.push(reg(param));
-            } else if (argType === "val32") {
-                const v = val(param);
-                output.push(v & 0xFF, (v >> 8) & 0xFF, (v >> 16) & 0xFF, (v >> 24) & 0xFF);
-            }
+        instr.args.forEach((_, i) => {
+            output.push(...encodeArg(parts[i + 1]));
         });
     }
 
@@ -900,7 +904,7 @@ function resetMachine() {
     cpu.pc = 0;
     cpu.registers.fill(0);
     cpu.registers[15] = 0xFFFF; 
-    cpu.ZF, cpu.SF, cpu.OF = 0;
+    cpu.ZF = cpu.SF = cpu.OF = 0;
     cpu.framebuffer.fill(0);
     terminal.value = '--- System Reset ---\n';
     updateUI();
@@ -912,31 +916,40 @@ const turboBatchSize = 10000;
 function loop() {
     if (!isRunning) return;
 
-    if (cpu.pc >= cpu.memory.length) {
-        terminal.value += `--- End of Memory Reached ---\n`;
-        stopMachine();
+    const now = performance.now();
+
+    // Handle sleep first
+    if (now < cpu.sleepUntil) {
+        timerId = setTimeout(loop, cpu.sleepUntil - now);
+        updateUI();
         return;
     }
 
-    if (isTurbo) {
-        for (let i = 0; i < turboBatchSize; i++) {
-            if (cpu.pc >= cpu.memory.length) {
-                terminal.value += `--- End of Memory Reached ---\n`;
-                stopMachine();
-                break;
-            }
-            if (!isRunning) {
-                stopMachine();
-                break;
-            }
-            cpu.clock();
+    const steps = isTurbo ? turboBatchSize : 1;
+
+    for (let i = 0; i < steps; i++) {
+        // Stop conditions
+        if (!isRunning) break;
+
+        if (cpu.pc >= cpu.memory.length) {
+            terminal.value += `--- End of Memory Reached ---\n`;
+            stopMachine();
+            break;
         }
-    } else {
+
+        // Respect sleep inside turbo batches
+        if (performance.now() < cpu.sleepUntil) break;
+
         cpu.clock();
     }
 
     updateUI();
-    timerId = setTimeout(loop, isTurbo ? 0 : getDelay());
+
+    // Schedule next tick
+    timerId = setTimeout(
+        loop,
+        isTurbo ? 0 : getDelay()
+    );
 }
 
 loadButton.el.click();
