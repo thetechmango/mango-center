@@ -565,23 +565,29 @@ function assemble(source) {
 let cpu = new CPU(65536);
 cpu.attachInput();
 
-const initialProgramText = `; Example Assembly Program
-INC R1
+const defaultProgramText = `; Example Assembly Program
+MOV R1, 1
 LOOP:
 PRINT R1
 ADD R1, R1
-CMP R1, R2
+CMP R1, 0
 JNZ LOOP
 HALT
 `;
 
-const program = assemble(initialProgramText);
+let initialProgramText = defaultProgramText;
 
-// Load into memory
-for (let i = 0; i < program.length; i++) {
-    cpu.memory[i] = program[i];
+// Read from URL hash: #asm=...
+const hash = window.location.hash;
+
+if (hash.startsWith("#asm=")) {
+    try {
+        const encoded = hash.substring(5);
+        initialProgramText = decodeURIComponent(escape(atob(encoded)));
+    } catch (e) {
+        console.error("Failed to decode asm from URL", e);
+    }
 }
-
 
 // UI
 
@@ -701,7 +707,7 @@ const terminal = ui.textarea({
     disabled: 'true'
 });
 
-const outputPanel = ui.panel({ style: { width: '300px', height: '90%' } }, [
+const outputPanel = ui.panel({ style: { width: '500px', height: '90%' } }, [
     ui.label({ text: "Terminal Output", style: { fontWeight: 'bold' } }),
     terminal,
     ui.button({
@@ -714,7 +720,7 @@ outputPanel.position('left', 10, 50);
 ui.mount(outputPanel, document.body);
 
 const programEditor = ui.textarea({ 
-    value: localStorage.getItem('cpu_program') || initialProgramText,
+    value: initialProgramText || localStorage.getItem('cpu_program'),
     oninput: (e) => {
         localStorage.setItem('cpu_program', programEditor.value);
     },
@@ -731,7 +737,7 @@ const programEditor = ui.textarea({
     autocorrect: 'off',
     autocapitalize: 'off',
     spellcheck: 'false',
-    autocomete: 'off'
+    autocomplete: 'off'
 });
 
 const loadButton = ui.button({
@@ -785,6 +791,26 @@ const filePicker = ui.el('input', {
 });
 ui.mount(filePicker, document.body);
 
+const shareBtn = ui.button({
+    text: 'Share URL',
+    onclick: async () => {
+        const code = programEditor.value;
+
+        const encoded = btoa(unescape(encodeURIComponent(code)));
+        const url = `${window.location.origin}${window.location.pathname}#asm=${encoded}`;
+
+        try {
+            await navigator.clipboard.writeText(url);
+        } catch {
+            const w = window.open();
+            if (w) {
+                w.document.write(`<pre>${url}</pre>`);
+                w.document.close();
+            }
+        }
+    }
+});
+
 const importBtn = ui.button({
     text: 'Import .asm',
     onclick: () => filePicker.el.click() // Open the file dialog secretly
@@ -797,9 +823,7 @@ const programPanel = ui.panel({ style: { width: '500px', height: '90%' } }, [
         loadButton,
         exportBtn,
         importBtn,
-        ui.button({ text: 'Clear', onclick: () => {
-            if(confirm("Clear editor?")) programEditor.value = '';
-        }})
+        shareBtn
     ])
 ]);
 
@@ -952,5 +976,6 @@ function loop() {
     );
 }
 
+
+programEditor.value = initialProgramText;
 loadButton.el.click();
-drawDisplay();
