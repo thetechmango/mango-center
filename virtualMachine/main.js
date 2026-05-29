@@ -19,6 +19,7 @@ class CPU {
         this.keyState = new Uint8Array(256);
 
         this.sleepUntil = 0;
+        this.waitingForKey = -1;
 
         this.audioCtx = null;
 
@@ -275,6 +276,15 @@ class CPU {
             this.sleepUntil = performance.now() + ms;
         };
 
+        this.ops[I.WAITKEY.opcode] = () => {
+            const key = this.readArg() & 0xFF;
+        
+            if (this.keyState[key]) return;
+        
+            // Otherwise enter wait state
+            this.waitingForKey = key;
+        };
+
         this.ops[I.BEEP.opcode] = () => {
             const freq = this.readArg();
             const duration = this.readArg();
@@ -288,6 +298,47 @@ class CPU {
             const r = this.readArgRaw();
             const key = this.readArg() & 0xFF;
             this.writeReg(r, this.keyState[key] ?? 0);
+        };
+
+        this.ops[I.TIME.opcode] = () => {
+            const r = this.readArgRaw();
+            this.writeReg(r, performance.now() | 0);
+        };
+
+        this.ops[I.CLIPWRITE.opcode] = () => {
+            const v = this.readArg();
+            navigator.clipboard.writeText(String(v));
+        };
+
+        this.ops[I.STORELOCAL.opcode] = () => {
+            const k = this.readArg();
+            const v = this.readArg();
+            localStorage.setItem(String(k), String(v));
+        };
+        
+        this.ops[I.LOADLOCAL.opcode] = () => {
+            const r = this.readArgRaw();
+            const k = this.readArg();
+            const v = localStorage.getItem(String(k));
+            this.writeReg(r, v ? parseInt(v) : 0);
+        };
+
+        this.ops[I.DUMP.opcode] = () => {
+            const addr = this.readArg();
+            const size = this.readArg();
+        
+            const end = Math.min(addr + size, this.memory.length);
+            const bytes = this.memory.slice(addr, end);
+        
+            const blob = new Blob([bytes], { type: "application/octet-stream" });
+            const url = URL.createObjectURL(blob);
+        
+            const a = document.createElement("a");
+            a.href = url;
+            a.download = `mem_${addr}_${size}.bin`;
+            a.click();
+        
+            URL.revokeObjectURL(url);
         };
     
         // --- Graphics ---
@@ -479,10 +530,16 @@ const INSTRUCTIONS = {
 
     PRINT:   { opcode: 0x50, args: ["any"] },
     READKEY: { opcode: 0x51, args: ["dst", "any"] },
-    SLEEP:   { opcode: 0x52, args: ["any"] },
-    BEEP:    { opcode: 0x53, args: ["any", "any"] }, // freq Hz, duration ms
+    WAITKEY: { opcode: 0x52, args: ["any"] },
+    SLEEP:   { opcode: 0x53, args: ["any"] },
+    BEEP:    { opcode: 0x54, args: ["any", "any"] }, // freq Hz, duration ms
 
     RAND: { opcode: 0x60, args: ["dst"] },
+    TIME: { opcode: 0x62, args: ["dst"] }, // ms
+    CLIPWRITE: { opcode: 0x63, args: ["any"] },
+    STORELOCAL: { opcode: 0x64, args: ["any","any"] }, // key, data
+    LOADLOCAL:  { opcode: 0x65, args: ["dst","any"] },
+    DUMP: { opcode: 0x66, args: ["any","any"] }, // addr, size
 
     SETPIX: { opcode: 0x70, args: ["any", "any", "any"] },
     GETPIX: { opcode: 0x71, args: ["dst", "any", "any"] },
@@ -575,18 +632,22 @@ JNZ LOOP
 HALT
 `;
 
-let initialProgramText = defaultProgramText;
-
-// Read from URL hash: #asm=...
 const hash = window.location.hash;
+const saved = localStorage.getItem('cpu_program');
+
+let initialProgramText;
 
 if (hash.startsWith("#asm=")) {
     try {
         const encoded = hash.substring(5);
         initialProgramText = decodeURIComponent(escape(atob(encoded)));
-    } catch (e) {
-        console.error("Failed to decode asm from URL", e);
+    } catch {
+        initialProgramText = defaultProgramText;
     }
+} else if (saved) {
+    initialProgramText = saved;
+} else {
+    initialProgramText = defaultProgramText;
 }
 
 // UI
@@ -719,10 +780,15 @@ const outputPanel = ui.panel({ style: { width: '500px', height: '90%' } }, [
 outputPanel.position('left', 10, 50);
 ui.mount(outputPanel, document.body);
 
+let saveTimer;
+
 const programEditor = ui.textarea({ 
-    value: initialProgramText || localStorage.getItem('cpu_program'),
-    oninput: (e) => {
-        localStorage.setItem('cpu_program', programEditor.value);
+    value: initialProgramText,
+    oninput: () => {
+        clearTimeout(saveTimer);
+        saveTimer = setTimeout(() => {
+            localStorage.setItem('cpu_program', programEditor.value);
+        }, 200);
     },
     style: {
         height: '100%',
@@ -784,6 +850,7 @@ const filePicker = ui.el('input', {
         const reader = new FileReader();
         reader.onload = (event) => {
             programEditor.value = event.target.result;
+            localStorage.setItem('cpu_program', programEditor.value);
             filePicker.el.value = ''; 
         };
         reader.readAsText(file);
@@ -930,6 +997,7 @@ function resetMachine() {
     cpu.registers[15] = 0xFFFF; 
     cpu.ZF = cpu.SF = cpu.OF = 0;
     cpu.framebuffer.fill(0);
+    cpu.waitingForKey = -1; 
     terminal.value = '--- System Reset ---\n';
     updateUI();
     drawDisplay();
@@ -949,6 +1017,19 @@ function loop() {
         return;
     }
 
+    // Handle WAITKEY blocking
+    if (cpu.waitingForKey !== -1) {
+        const key = cpu.waitingForKey;
+
+        if (!cpu.keyState[key]) {
+            timerId = setTimeout(loop, isTurbo ? 0 : 1);
+            updateUI();
+            return;
+        }
+
+        cpu.waitingForKey = -1;
+    }
+
     const steps = isTurbo ? turboBatchSize : 1;
 
     for (let i = 0; i < steps; i++) {
@@ -961,8 +1042,9 @@ function loop() {
             break;
         }
 
-        // Respect sleep inside turbo batches
+        // Respect sleep and waitkey
         if (performance.now() < cpu.sleepUntil) break;
+        if (cpu.waitingForKey !== -1) break;
 
         cpu.clock();
     }
@@ -976,6 +1058,4 @@ function loop() {
     );
 }
 
-
-programEditor.value = initialProgramText;
 loadButton.el.click();
