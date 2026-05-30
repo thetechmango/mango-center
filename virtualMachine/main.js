@@ -1,5 +1,11 @@
 import { ui } from '../ui.js';
 
+const SIN_TABLE = new Int16Array(256);
+
+for (let i = 0; i < 256; i++) {
+    SIN_TABLE[i] = Math.round(Math.sin(i / 256 * Math.PI * 2) * 256);
+}
+
 class CPU {
     constructor(memorySize = 65536) {
         this.memory = new Uint8Array(memorySize);
@@ -14,11 +20,14 @@ class CPU {
         this.SF = 0;
         this.OF = 0;
 
-        this.framebuffer = new Uint8Array(128 * 64);
+        this.framebuffer = new Uint8Array(128 * 128);
+        this.lastBuffer = new Uint8Array(128 * 128);
         this.needsPresent = false;
-        this.keyState = new Uint8Array(256);
+
+        this.printBuffer = [];
 
         this.sleepUntil = 0;
+        this.keyState = new Uint8Array(256);
         this.waitingForKey = -1;
 
         this.audioCtx = null;
@@ -26,9 +35,20 @@ class CPU {
         this._boundKeyDown = null;
         this._boundKeyUp = null;
 
+        this.mouseX = 0;
+        this.mouseY = 0;
+
         this.ops = new Array(256);
         this.initOps();
     }
+
+    static SIN_TABLE = (() => {
+        const t = new Int16Array(256);
+        for (let i = 0; i < 256; i++) {
+            t[i] = Math.round(Math.sin(i / 256 * Math.PI * 2) * 256);
+        }
+        return t;
+    })();
 
     readArg() {
         const type = this.memory[this.pc++];
@@ -267,8 +287,7 @@ class CPU {
     
         this.ops[I.PRINT.opcode] = () => {
             const v = this.readArg();
-            terminal.value += v + '\n';
-            terminal.el.scrollTop = terminal.el.scrollHeight;
+            this.printBuffer.push(v);
         };
     
         this.ops[I.SLEEP.opcode] = () => {
@@ -292,6 +311,16 @@ class CPU {
             if (freq > 0 && duration > 0) {
                 this.beep(freq, duration);
             }
+        };
+
+        this.ops[I.MOUSEX.opcode] = () => {
+            const r = this.readArgRaw();
+            this.writeReg(r, this.mouseX);
+        };
+        
+        this.ops[I.MOUSEY.opcode] = () => {
+            const r = this.readArgRaw();
+            this.writeReg(r, this.mouseY);
         };
     
         this.ops[I.READKEY.opcode] = () => {
@@ -363,8 +392,21 @@ class CPU {
                 this.writeReg(r, 0);
             }
         };
+
+        this.ops[I.LASTPIX.opcode] = () => {
+            const r = this.readArgRaw();
+            const x = this.readArg();
+            const y = this.readArg();
+        
+            if (x >= 0 && x < WIDTH && y >= 0 && y < HEIGHT) {
+                this.writeReg(r, this.lastBuffer[y * WIDTH + x]);
+            } else {
+                this.writeReg(r, 0);
+            }
+        };
     
         this.ops[I.PRESENT.opcode] = () => {
+            this.lastBuffer.set(this.framebuffer);
             this.needsPresent = true;
         };
     
@@ -420,6 +462,116 @@ class CPU {
                 if (e2 <= dx) { err += dx; y0 += sy; }
             }
         };
+
+        this.ops[I.CIRCLE.opcode] = () => {
+            const cx = this.readArg();
+            const cy = this.readArg();
+            const r  = this.readArg();
+            const c  = this.readArg() & 0xFF;
+        
+            let x = r;
+            let y = 0;
+            let err = 0;
+        
+            const plot8 = (px, py) => {
+                if (px >= 0 && px < WIDTH && py >= 0 && py < HEIGHT) {
+                    this.framebuffer[py * WIDTH + px] = c;
+                }
+            };
+        
+            while (x >= y) {
+                plot8(cx + x, cy + y);
+                plot8(cx + y, cy + x);
+                plot8(cx - y, cy + x);
+                plot8(cx - x, cy + y);
+                plot8(cx - x, cy - y);
+                plot8(cx - y, cy - x);
+                plot8(cx + y, cy - x);
+                plot8(cx + x, cy - y);
+        
+                y++;
+        
+                if (err <= 0) {
+                    err += 2 * y + 1;
+                } else {
+                    x--;
+                    err += 2 * (y - x) + 1;
+                }
+            }
+        };
+
+        this.ops[I.CIRCLEF.opcode] = () => {
+            const cx = this.readArg();
+            const cy = this.readArg();
+            const r  = this.readArg();
+            const c  = this.readArg() & 0xFF;
+        
+            const r2 = r * r;
+        
+            for (let y = -r; y <= r; y++) {
+                const yy = y + cy;
+                if (yy < 0 || yy >= HEIGHT) continue;
+        
+                const dx = Math.floor(Math.sqrt(r2 - y * y));
+        
+                const xStart = cx - dx;
+                const xEnd   = cx + dx;
+        
+                for (let x = xStart; x <= xEnd; x++) {
+                    if (x >= 0 && x < WIDTH) {
+                        this.framebuffer[yy * WIDTH + x] = c;
+                    }
+                }
+            }
+        };
+
+        this.ops[I.FLOODFILL.opcode] = () => {
+            const x0 = this.readArg();
+            const y0 = this.readArg();
+            const newColor = this.readArg() & 0xFF;
+        
+            if (x0 < 0 || x0 >= WIDTH || y0 < 0 || y0 >= HEIGHT) return;
+        
+            const fb = this.framebuffer;
+            const targetColor = fb[y0 * WIDTH + x0];
+        
+            if (targetColor === newColor) return;
+        
+            const stack = [[x0, y0]];
+        
+            while (stack.length) {
+                let [x, y] = stack.pop();
+        
+                // move left to find span start
+                let left = x;
+                while (left >= 0 && fb[y * WIDTH + left] === targetColor) {
+                    left--;
+                }
+                left++;
+        
+                // move right to find span end
+                let right = x;
+                while (right < WIDTH && fb[y * WIDTH + right] === targetColor) {
+                    right++;
+                }
+                right--;
+        
+                // fill span + check above/below
+                for (let i = left; i <= right; i++) {
+                    fb[y * WIDTH + i] = newColor;
+        
+                    // check pixel above
+                    if (y > 0 && fb[(y - 1) * WIDTH + i] === targetColor) {
+                        stack.push([i, y - 1]);
+                    }
+        
+                    // check pixel below
+                    if (y < HEIGHT - 1 && fb[(y + 1) * WIDTH + i] === targetColor) {
+                        stack.push([i, y + 1]);
+                    }
+                }
+            }
+        };
     
         this.ops[I.HALT.opcode] = () => {
             stopMachine();
@@ -452,6 +604,34 @@ class CPU {
 
         window.addEventListener("keydown", this._boundKeyDown);
         window.addEventListener("keyup", this._boundKeyUp);
+
+        window.addEventListener("mousemove", (e) => {
+            const rect = display.el.getBoundingClientRect();
+        
+            const scaleX = rect.width / WIDTH;
+            const scaleY = rect.height / HEIGHT;
+        
+            // actual pixel-perfect scale used (because canvas is scaled uniformly)
+            const scale = Math.min(scaleX, scaleY);
+        
+            const renderWidth = WIDTH * scale;
+            const renderHeight = HEIGHT * scale;
+        
+            // compute letterbox offset inside the rect
+            const offsetX = (rect.width - renderWidth) / 2;
+            const offsetY = (rect.height - renderHeight) / 2;
+        
+            // mouse position inside rendered canvas area
+            const x = (e.clientX - rect.left - offsetX) / scale;
+            const y = (e.clientY - rect.top - offsetY) / scale;
+        
+            this.mouseX = Math.floor(x);
+            this.mouseY = Math.floor(y);
+        
+            // clamp
+            this.mouseX = Math.max(0, Math.min(WIDTH - 1, this.mouseX));
+            this.mouseY = Math.max(0, Math.min(HEIGHT - 1, this.mouseY));
+        });
     }
 
     detachInput() {
@@ -486,7 +666,7 @@ class CPU {
 
 let timerId = null;
 let isRunning = false;
-let isTurbo = false; 
+let isTurbo = JSON.parse(localStorage.getItem("isTurbo") ?? "true");
 
 const INSTRUCTIONS = {
     NOP: { opcode: 0x00, args: [] },
@@ -514,7 +694,6 @@ const INSTRUCTIONS = {
     NEG: { opcode: 0x2D, args: ["dst"] },
 
     CMP: { opcode: 0x30, args: ["any", "any"] },
-
     JMP: { opcode: 0x31, args: ["any"] },
     JZ:  { opcode: 0x32, args: ["any"] },
     JNZ: { opcode: 0x33, args: ["any"] },
@@ -533,6 +712,8 @@ const INSTRUCTIONS = {
     WAITKEY: { opcode: 0x52, args: ["any"] },
     SLEEP:   { opcode: 0x53, args: ["any"] },
     BEEP:    { opcode: 0x54, args: ["any", "any"] }, // freq Hz, duration ms
+    MOUSEX:  { opcode: 0x55, args: ["dst"] },
+    MOUSEY:  { opcode: 0x56, args: ["dst"] },
 
     RAND: { opcode: 0x60, args: ["dst"] },
     TIME: { opcode: 0x62, args: ["dst"] }, // ms
@@ -543,10 +724,14 @@ const INSTRUCTIONS = {
 
     SETPIX: { opcode: 0x70, args: ["any", "any", "any"] },
     GETPIX: { opcode: 0x71, args: ["dst", "any", "any"] },
-    PRESENT:{ opcode: 0x72, args: [] },
-    FILL:   { opcode: 0x73, args: ["any"] },
-    RECT:   { opcode: 0x74, args: ["any","any","any","any","any"] },
-    LINE:   { opcode: 0x75, args: ["any","any","any","any","any"] },
+    LASTPIX:{ opcode: 0x72, args: ["dst", "any", "any"] },
+    PRESENT:{ opcode: 0x73, args: [] },
+    FILL:   { opcode: 0x74, args: ["any"] },
+    RECT:   { opcode: 0x75, args: ["any","any","any","any","any"] },
+    LINE:   { opcode: 0x76, args: ["any","any","any","any","any"] },
+    CIRCLE: { opcode: 0x77, args: ["any","any","any","any"] }, // x, y, radius, color
+    CIRCLEF: { opcode: 0x78, args: ["any","any","any","any"] }, // filled
+    FLOODFILL: { opcode: 0x79, args: ["any","any","any"] }, // x, y, color
 
     HALT: { opcode: 0xFF, args: [] }
 };
@@ -600,26 +785,30 @@ function assemble(source) {
     }
 
     // PASS 2
-    for (let raw of lines) {
+    for (let i = 0; i < lines.length; i++) {
+        let raw = lines[i];
         let line = raw.trim();
+    
         if (!line || line.startsWith(";") || line.endsWith(":")) continue;
-
+    
         const parts = line.split(/[\s,]+/);
         const instr = INSTRUCTIONS[parts[0].toUpperCase()];
-
-        if (!instr) throw new Error(`Unknown instruction: ${parts[0]}`);
-
+    
+        if (!instr) {
+            throw new Error(`Line ${i + 1}: Unknown instruction: ${parts[0]}`);
+        }
+    
         output.push(instr.opcode);
-
-        instr.args.forEach((_, i) => {
-            output.push(...encodeArg(parts[i + 1]));
+    
+        instr.args.forEach((_, j) => {
+            output.push(...encodeArg(parts[j + 1]));
         });
     }
 
     return output;
 }
 
-let cpu = new CPU(65536);
+let cpu = new CPU(16 * 1024 * 1024); // 16 MB
 cpu.attachInput();
 
 const defaultProgramText = `; Example Assembly Program
@@ -710,10 +899,11 @@ function getDelay() {
 
 const runningLabel = ui.label({ text: 'Stopped' });
 const turboButton = ui.button({
-    text: 'Turbo Mode: off',
+    text: 'Turbo Mode: ' + (isTurbo ? 'on' : 'off'),
     onclick: () => {
         isTurbo = !isTurbo;
         turboButton.text = 'Turbo Mode: ' + (isTurbo ? 'on' : 'off');
+        localStorage.setItem("isTurbo", isTurbo ? "true" : "false");
     }
 })
 
@@ -898,14 +1088,14 @@ programPanel.position('right', 10, 50);
 ui.mount(programPanel, document.body);
 
 const WIDTH = 128;
-const HEIGHT = 64;
+const HEIGHT = 128;
 
 const display = ui.el('canvas', {
-    style: { width: '512px', height: '256px' }
+    style: { width: '256px', height: '256px' }
 });
 
-display.el.width = WIDTH;   // 128
-display.el.height = HEIGHT; // 64
+display.el.width = WIDTH;
+display.el.height = HEIGHT;
 
 const ctx = display.el.getContext("2d");
 ctx.imageSmoothingEnabled = false;
@@ -920,8 +1110,8 @@ display.el.addEventListener("click", async () => {
 });
 
 const displayPanel = ui.panel({ style: { gap: "1px" } }, [
-    ui.label({ text: '128x64', style: { fontSize: '10px', color: '#666'}}),
-    display
+    display,
+    ui.label({ text: '128x128', style: { fontSize: '10px', color: '#666'}})
 ]);
 
 displayPanel.position('bottom', 10, 50);
@@ -961,6 +1151,16 @@ function updateUI() {
         drawDisplay();
         cpu.needsPresent = false;
     }
+
+    // Update terminal output
+    if (cpu.printBuffer.length > 0) {
+        for (let i = 0; i < cpu.printBuffer.length; i++) {
+            terminal.value += cpu.printBuffer[i] + '\n';
+        }
+        cpu.printBuffer.length = 0;
+        terminal.el.scrollTop = terminal.el.scrollHeight;
+    }
+    
 }
 
 function startMachine() {
@@ -997,6 +1197,7 @@ function resetMachine() {
     cpu.registers[15] = 0xFFFF; 
     cpu.ZF = cpu.SF = cpu.OF = 0;
     cpu.framebuffer.fill(0);
+    cpu.lastBuffer.fill(0);
     cpu.waitingForKey = -1; 
     terminal.value = '--- System Reset ---\n';
     updateUI();
