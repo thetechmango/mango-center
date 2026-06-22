@@ -1,0 +1,37 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <style>
+        html, body {
+            margin: 0;
+            height: 100%;
+            overflow: hidden;
+        }
+        #canvas {
+            display: block;
+            position: absolute;
+            top: 0;
+            left: 0;
+            z-index: 1;
+        }
+        #palette {
+            position: absolute;
+            z-index: 999;
+            top: 10px;
+            left: 10px;
+        }
+        #palette button {
+            width: 24px;
+            height: 24px;
+        }
+    </style>
+</head>
+
+<body>
+    <div id="palette"></div>
+    <canvas id="canvas" width="256" height="256"></canvas>
+
+    <script src="main.js"></script>
+</body>
+
+</html>
