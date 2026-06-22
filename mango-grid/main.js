@@ -174,6 +174,8 @@ canvas.onclick = (e) => {
 
 function render() {
     ctx.clearRect(0, 0, canvas.width, canvas.height);
+    ctx.fillStyle = "#101010";
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
 
     const startX = Math.floor(camera.x);
     const startY = Math.floor(camera.y);
@@ -213,7 +215,7 @@ function render() {
 
 setInterval(() => {
     const remaining = Math.max(0, nextAllowedTime - Date.now());
-    document.title = remaining > 0
+    document.getElementById("cooldown").innerText = remaining > 0
         ? `Cooldown: ${Math.ceil(remaining/1000)}s`
         : "Ready";
 }, 200);
