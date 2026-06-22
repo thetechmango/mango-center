@@ -49,8 +49,8 @@ function drawPixel(x, y, color) {
     ctx.fillStyle = colors[color];
 
     ctx.fillRect(
-        x * camera.zoom + offsetX,
-        y * camera.zoom + offsetY,
+        x * camera.zoom + camera.x,
+        y * camera.zoom + camera.y,
         camera.zoom,
         camera.zoom
     );
