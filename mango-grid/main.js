@@ -31,7 +31,9 @@ let nextAllowedTime = 0;
 
 const colors = [
     "#000000", "#ffffff", "#ff0000", "#00ff00",
-    "#0000ff", "#ffff00", "#ff00ff", "#00ffff"
+    "#0000ff", "#ffff00", "#ff00ff", "#00ffff",
+    "#AAAAAA", "#222222", "#ff9000", "#8000d0",
+    "#D2B48C", "#492403"
 ];
 
 let selectedColor = 0;
@@ -61,6 +63,10 @@ ws.onmessage = (e) => {
 
     if (data.type === "init") {
         grid.set(data.grid);
+    }
+    
+    if (data.type === "count") {
+        document.getElementById("onlineCount").textContent = `Online: ${data.count}`;
     }
 
     if (data.type === "place") {
@@ -174,7 +180,7 @@ canvas.onclick = (e) => {
 
 function render() {
     ctx.clearRect(0, 0, canvas.width, canvas.height);
-    ctx.fillStyle = "#101010";
+    ctx.fillStyle = "#222222";
     ctx.fillRect(0, 0, canvas.width, canvas.height);
 
     const startX = Math.floor(camera.x);

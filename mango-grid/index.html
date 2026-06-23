@@ -22,8 +22,8 @@
             z-index: 999;
             top: 10px;
             left: 10px;
-            background-color: #222;
-            border: 5px solid #222;
+            background-color: #444;
+            border: 5px solid #444;
             border-radius: 10px;
         }
         #palette button {
@@ -38,7 +38,18 @@
             right: 10px;
             padding: 5px;
             margin: 0;
-            background-color: #222;
+            background-color: #444;
+            border-radius: 5px; 
+            color: #fff;
+            z-index: 999;
+        }
+        #onlineCount {
+            position: absolute;
+            bottom: 10px;;
+            left: 10px;
+            padding: 5px;
+            margin: 0;
+            background-color: #444;
             border-radius: 5px; 
             color: #fff;
             z-index: 999;
@@ -49,6 +60,7 @@
 <body>
     <div id="palette"></div>
     <p id="cooldown">Cooldown: 5s</p>
+    <div id="onlineCount">Online: 1</div>
     <canvas id="canvas" width="256" height="256"></canvas>
 
     <script src="main.js"></script>
