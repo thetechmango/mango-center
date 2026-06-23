@@ -178,13 +178,12 @@ canvas.addEventListener("wheel", (e) => {
     camera.y += before.y - after.y;
 });
 
-const authInput = document.getElementById("adminCode");
-const authBtn = document.getElementById("authBtn");
+document.getElementById("authBtn").onclick = () => {
+    const code = document.getElementById("adminCode").value;
 
-authBtn.onclick = () => {
     ws.send(JSON.stringify({
         type: "auth",
-        code: authInput.value
+        code
     }));
 };
 
