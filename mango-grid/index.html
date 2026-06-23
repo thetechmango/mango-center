@@ -54,6 +54,18 @@
             color: #fff;
             z-index: 999;
         }
+        #adminPanel {
+            position: absolute;
+            bottom: 10px;
+            right: 10px;
+            z-index: 999;
+            background: #444;
+            padding: 6px;
+            border-radius: 6px;
+        }
+        #adminPanel input {
+            width: 120px;
+        }
     </style>
 </head>
 
@@ -61,6 +73,10 @@
     <div id="palette"></div>
     <p id="cooldown">Cooldown: 5s</p>
     <div id="onlineCount">Online: 1</div>
+    <div id="adminPanel">
+        <input id="adminCode" type="password" placeholder="admin code">
+        <button id="authBtn">Auth</button>
+    </div>
     <canvas id="canvas" width="256" height="256"></canvas>
 
     <script src="main.js"></script>

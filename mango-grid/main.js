@@ -29,6 +29,10 @@ const grid = new Uint8Array(SIZE * SIZE);
 const ws = new WebSocket("wss://ws.themango.click");
 let nextAllowedTime = 0;
 
+let isAdmin = false;
+
+const COOLDOWN_MS = 5000;
+
 const colors = [
     "#000000", "#ffffff", "#ff0000", "#00ff00",
     "#0000ff", "#ffff00", "#ff00ff", "#00ffff",
@@ -64,6 +68,19 @@ ws.onmessage = (e) => {
     if (data.type === "init") {
         grid.set(data.grid);
     }
+
+    if (data.type === "auth") {
+        if (data.success) {
+            isAdmin = true;
+            alert("Admin mode enabled");
+            document.getElementById("adminPanel").style.display = "none";
+        } else if (data.reason === "too_many_attempts") {
+            alert("Too many attempts");
+            document.getElementById("adminPanel").style.display = "none";
+        } else {
+            alert("Wrong code");
+        }
+    }
     
     if (data.type === "count") {
         document.getElementById("onlineCount").textContent = `Online: ${data.count}`;
@@ -97,6 +114,29 @@ canvas.onmousedown = (e) => {
 
     lastX = e.clientX;
     lastY = e.clientY;
+};
+
+canvas.onclick = (e) => {
+    if (didDrag) return;
+
+    const now = Date.now();
+    if (!isAdmin && now < nextAllowedTime) return;
+
+    const p = screenToWorld(e.clientX, e.clientY);
+
+    const x = p.x;
+    const y = p.y;
+
+    const color = selectedColor;
+
+    ws.send(JSON.stringify({
+        type: "place",
+        x, y, color
+    }));
+
+    if (!isAdmin) {
+        nextAllowedTime = Date.now() + COOLDOWN_MS;
+    }
 };
 
 window.onmouseup = () => {
@@ -138,6 +178,16 @@ canvas.addEventListener("wheel", (e) => {
     camera.y += before.y - after.y;
 });
 
+const authInput = document.getElementById("adminCode");
+const authBtn = document.getElementById("authBtn");
+
+authBtn.onclick = () => {
+    ws.send(JSON.stringify({
+        type: "auth",
+        code: authInput.value
+    }));
+};
+
 function worldToScreen(x, y) {
     return {
         x: (x - camera.x) * camera.zoom,
@@ -156,27 +206,6 @@ function screenToWorld(clientX, clientY) {
         y: Math.floor(y)
     };
 }
-
-canvas.onclick = (e) => {
-    if (didDrag) return;
-
-    const now = Date.now();
-    if (now < nextAllowedTime) return;
-
-    const p = screenToWorld(e.clientX, e.clientY);
-
-    const x = p.x;
-    const y = p.y;
-
-    const color = selectedColor;
-
-    ws.send(JSON.stringify({
-        type: "place",
-        x, y, color
-    }));
-
-    nextAllowedTime = now + 5000;
-};
 
 function render() {
     ctx.clearRect(0, 0, canvas.width, canvas.height);
