@@ -26,7 +26,7 @@ let didDrag = false;
 
 const grid = new Uint8Array(SIZE * SIZE);
 
-const ws = new WebSocket("wss://71.121.239.115:8080");
+const ws = new WebSocket("wss://ws.themango.click");
 let nextAllowedTime = 0;
 
 const colors = [
