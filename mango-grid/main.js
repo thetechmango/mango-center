@@ -1,7 +1,7 @@
 const SIZE = 4096;
 const canvas = document.getElementById("canvas");
 const ctx = canvas.getContext("2d");
-ctx.imageSmoothingEnabled = false;
+ctx.imageSmoothingEnabled = true;
 
 const off = document.createElement("canvas");
 off.width = SIZE;
@@ -103,6 +103,7 @@ ws.onmessage = (e) => {
         offCtx.putImageData(imageData, 0, 0);
     
         needsRender = true;
+        document.getElementById("loader").style.display = "none";
     }
 
     if (data.type === "auth") {
@@ -130,7 +131,6 @@ ws.onmessage = (e) => {
     
         const [r, g, b] = colorRGB[color];
     
-        // draw ONLY the changed pixel
         offCtx.fillStyle = `rgb(${r}, ${g}, ${b})`;
         offCtx.fillRect(x, y, 1, 1);
     
