@@ -75,6 +75,7 @@ let hoverX = -1;
 let hoverY = -1;
 
 const remoteHovers = [];
+let onlineCount = 1;
 
 let dragging = false;
 let lastX = 0;
@@ -140,6 +141,7 @@ ws.onmessage = (e) => {
     }
     
     if (data.type === "count") {
+        onlineCount = data.count;
         document.getElementById("onlineCount").textContent = `Online: ${data.count}`;
     }
 
@@ -162,6 +164,7 @@ ws.onmessage = (e) => {
     }
 
     if (data.type === "hovers") {
+        if (onlineCount <= 1) return;
         remoteHovers.length = 0;
         remoteHovers.push(...data.hovers);
         needsRender = true;
@@ -362,6 +365,7 @@ setInterval(() => {
 
 setInterval(() => {
     if (!ws || ws.readyState !== 1) return;
+    if (onlineCount <= 1) return;
 
     ws.send(JSON.stringify({
         type: "hover",
