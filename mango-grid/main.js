@@ -74,6 +74,9 @@ camera.y = SIZE / 2 - (canvas.height / camera.zoom) / 2;
 let hoverX = -1;
 let hoverY = -1;
 
+let lastHoverX = null;
+let lastHoverY = null;
+
 const remoteHovers = [];
 let onlineCount = 1;
 
@@ -366,6 +369,14 @@ setInterval(() => {
 setInterval(() => {
     if (!ws || ws.readyState !== 1) return;
     if (onlineCount <= 1) return;
+
+    if (
+        hoverX === lastHoverX &&
+        hoverY === lastHoverY
+    ) return;
+
+    lastHoverX = hoverX;
+    lastHoverY = hoverY;
 
     ws.send(JSON.stringify({
         type: "hover",
