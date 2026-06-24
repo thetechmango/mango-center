@@ -311,11 +311,18 @@ function render() {
     requestAnimationFrame(render);
 }
 
+const cooldownEl = document.getElementById("cooldown");
+
 setInterval(() => {
     const remaining = Math.max(0, nextAllowedTime - Date.now());
-    document.getElementById("cooldown").innerText = remaining > 0
-        ? `Cooldown: ${Math.ceil(remaining/1000)}s`
-        : "Ready";
+    
+    if (remaining > 0) {
+        cooldownEl.innerText = `Cooldown: ${Math.ceil(remaining/1000)}s`;
+        cooldownEl.style.backgroundColor = "#900000";
+    } else {
+        cooldownEl.innerText = "Ready";
+        cooldownEl.style.backgroundColor = "#009000";
+    }
 }, 200);
 
 render();
