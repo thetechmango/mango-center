@@ -24,7 +24,7 @@ const imageData = ctx.createImageData(SIZE, SIZE);
 const pixels = imageData.data;
 
 const colors = [
-    "#000000", "#ffffff", "#ff0000", "#00ff00",
+    "#ffffff", "#000000", "#ff0000", "#00ff00",
     "#0000ff", "#ffff00", "#ff00ff", "#00ffff",
     "#AAAAAA", "#222222", "#ff9000", "#8000d0",
     "#D2B48C", "#492403"
