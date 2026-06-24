@@ -3,12 +3,49 @@ const canvas = document.getElementById("canvas");
 const ctx = canvas.getContext("2d");
 ctx.imageSmoothingEnabled = false;
 
+const off = document.createElement("canvas");
+off.width = SIZE;
+off.height = SIZE;
+
+const offCtx = off.getContext("2d");
+offCtx.imageSmoothingEnabled = false;
+
+let needsRender = true;
+
 function resize() {
     canvas.width = window.innerWidth;
     canvas.height = window.innerHeight;
+    needsRender = true;
 }
 window.addEventListener("resize", resize);
 resize();
+
+const imageData = ctx.createImageData(SIZE, SIZE);
+const pixels = imageData.data;
+
+const colors = [
+    "#000000", "#ffffff", "#ff0000", "#00ff00",
+    "#0000ff", "#ffff00", "#ff00ff", "#00ffff",
+    "#AAAAAA", "#222222", "#ff9000", "#8000d0",
+    "#D2B48C", "#492403"
+];
+
+let selectedColor = 0;
+
+const paletteDiv = document.getElementById("palette");
+
+colors.forEach((c, i) => {
+    const btn = document.createElement("button");
+    btn.style.background = c;
+    btn.onclick = () => selectedColor = i;
+    paletteDiv.appendChild(btn);
+});
+
+const colorRGB = colors.map(c => [
+    parseInt(c.slice(1, 3), 16),
+    parseInt(c.slice(3, 5), 16),
+    parseInt(c.slice(5, 7), 16)
+]);
 
 const camera = {
     x: 0,
@@ -36,24 +73,6 @@ let isAdmin = false;
 
 const COOLDOWN_MS = 5000;
 
-const colors = [
-    "#000000", "#ffffff", "#ff0000", "#00ff00",
-    "#0000ff", "#ffff00", "#ff00ff", "#00ffff",
-    "#AAAAAA", "#222222", "#ff9000", "#8000d0",
-    "#D2B48C", "#492403"
-];
-
-let selectedColor = 0;
-
-const paletteDiv = document.getElementById("palette");
-
-colors.forEach((c, i) => {
-    const btn = document.createElement("button");
-    btn.style.background = c;
-    btn.onclick = () => selectedColor = i;
-    paletteDiv.appendChild(btn);
-});
-
 function drawPixel(x, y, color) {
     ctx.fillStyle = colors[color];
 
@@ -70,6 +89,20 @@ ws.onmessage = (e) => {
 
     if (data.type === "init") {
         grid.set(data.grid);
+    
+        for (let i = 0; i < grid.length; i++) {
+            const [r, g, b] = colorRGB[grid[i]];
+            const p = i * 4;
+    
+            pixels[p] = r;
+            pixels[p + 1] = g;
+            pixels[p + 2] = b;
+            pixels[p + 3] = 255;
+        }
+
+        offCtx.putImageData(imageData, 0, 0);
+    
+        needsRender = true;
     }
 
     if (data.type === "auth") {
@@ -91,8 +124,21 @@ ws.onmessage = (e) => {
 
     if (data.type === "place") {
         const { x, y, color } = data;
-        grid[y * SIZE + x] = color;
-        drawPixel(x, y, color);
+    
+        const i = y * SIZE + x;
+        grid[i] = color;
+    
+        const p = i * 4;
+        const [r, g, b] = colorRGB[color];
+    
+        pixels[p] = r;
+        pixels[p + 1] = g;
+        pixels[p + 2] = b;
+        pixels[p + 3] = 255;
+
+        offCtx.putImageData(imageData, 0, 0);
+    
+        needsRender = true;
     }
 
     if (data.type === "cooldown") {
@@ -102,8 +148,12 @@ ws.onmessage = (e) => {
 
 canvas.onmousemove = (e) => {
     const p = screenToWorld(e.clientX, e.clientY);
-    hoverX = p.x;
-    hoverY = p.y;
+
+    if (p.x !== hoverX || p.y !== hoverY) {
+        hoverX = p.x;
+        hoverY = p.y;
+        needsRender = true;
+    }
 };
 
 canvas.onmouseleave = () => {
@@ -158,6 +208,7 @@ window.onmousemove = (e) => {
 
     camera.x -= dx / camera.zoom;
     camera.y -= dy / camera.zoom;
+    needsRender = true;
 
     lastX = e.clientX;
     lastY = e.clientY;
@@ -177,6 +228,7 @@ canvas.addEventListener("wheel", (e) => {
 
     camera.x += before.x - after.x;
     camera.y += before.y - after.y;
+    needsRender = true;
 });
 
 document.getElementById("authBtn").onclick = () => {
@@ -208,31 +260,32 @@ function screenToWorld(clientX, clientY) {
 }
 
 function render() {
+    if (!needsRender) {
+        requestAnimationFrame(render);
+        return;
+    }
+
+    needsRender = false;
+
     ctx.clearRect(0, 0, canvas.width, canvas.height);
     ctx.fillStyle = "#222222";
     ctx.fillRect(0, 0, canvas.width, canvas.height);
 
-    const startX = Math.floor(camera.x);
-    const startY = Math.floor(camera.y);
-    const endX = Math.ceil(camera.x + canvas.width / camera.zoom);
-    const endY = Math.ceil(camera.y + canvas.height / camera.zoom);
+    ctx.imageSmoothingEnabled = false;
 
-    for (let y = startY; y < endY; y++) {
-        if (y < 0 || y >= SIZE) continue;
+    ctx.drawImage(
+        off,
+        camera.x,
+        camera.y,
+        canvas.width / camera.zoom,
+        canvas.height / camera.zoom,
+        0,
+        0,
+        canvas.width,
+        canvas.height
+    );
 
-        for (let x = startX; x < endX; x++) {
-            if (x < 0 || x >= SIZE) continue;
-
-            ctx.fillStyle = colors[grid[y * SIZE + x]];
-
-            const sx = Math.floor((x - camera.x) * camera.zoom);
-            const sy = Math.floor((y - camera.y) * camera.zoom);
-            const sz = Math.ceil(camera.zoom);
-
-            ctx.fillRect(sx, sy, sz, sz);
-        }
-    }
-
+    // hover
     if (hoverX >= 0 && hoverY >= 0) {
         ctx.strokeStyle = colors[selectedColor];
         ctx.lineWidth = 2;
