@@ -1,4 +1,4 @@
-const SIZE = 256;
+const SIZE = 1024;
 const canvas = document.getElementById("canvas");
 const ctx = canvas.getContext("2d");
 ctx.imageSmoothingEnabled = false;
@@ -15,6 +15,9 @@ const camera = {
     y: 0,
     zoom: 8
 };
+
+camera.x = SIZE / 2 - (canvas.width / camera.zoom) / 2;
+camera.y = SIZE / 2 - (canvas.height / camera.zoom) / 2;
 
 let hoverX = -1;
 let hoverY = -1;
@@ -169,8 +172,6 @@ canvas.addEventListener("wheel", (e) => {
 
     if (e.deltaY < 0) camera.zoom *= scale;
     else camera.zoom /= scale;
-
-    camera.zoom = Math.round(camera.zoom);
 
     const after = screenToWorld(e.clientX, e.clientY);
 
