@@ -53,6 +53,9 @@ colors.forEach((c, i) => {
     colorButtons.push(btn);
 });
 
+// Initialize with selected
+colorButtons[selectedColor].classList.add("selected");
+
 const colorRGB = colors.map(c => [
     parseInt(c.slice(1, 3), 16),
     parseInt(c.slice(3, 5), 16),
@@ -71,6 +74,8 @@ camera.y = SIZE / 2 - (canvas.height / camera.zoom) / 2;
 let hoverX = -1;
 let hoverY = -1;
 
+const remoteHovers = [];
+
 let dragging = false;
 let lastX = 0;
 let lastY = 0;
@@ -79,6 +84,7 @@ let didDrag = false;
 const grid = new Uint8Array(SIZE * SIZE);
 
 const ws = new WebSocket("wss://ws.themango.click");
+ws.binaryType = "arraybuffer";
 let nextAllowedTime = 0;
 
 let isAdmin = false;
@@ -97,15 +103,15 @@ function drawPixel(x, y, color) {
 }
 
 ws.onmessage = (e) => {
-    const data = JSON.parse(e.data);
+    if (typeof e.data !== "string") {
+        const arr = new Uint8Array(e.data);
 
-    if (data.type === "init") {
-        grid.set(data.grid);
-    
+        grid.set(arr);
+
         for (let i = 0; i < grid.length; i++) {
             const [r, g, b] = colorRGB[grid[i]];
             const p = i * 4;
-    
+
             pixels[p] = r;
             pixels[p + 1] = g;
             pixels[p + 2] = b;
@@ -113,10 +119,12 @@ ws.onmessage = (e) => {
         }
 
         offCtx.putImageData(imageData, 0, 0);
-    
         needsRender = true;
         document.getElementById("loader").style.display = "none";
+        return;
     }
+
+    const data = JSON.parse(e.data);
 
     if (data.type === "auth") {
         if (data.success) {
@@ -152,14 +160,10 @@ ws.onmessage = (e) => {
     if (data.type === "cooldown") {
         nextAllowedTime = Date.now() + data.remaining;
     }
-};
 
-canvas.onmousemove = (e) => {
-    const p = screenToWorld(e.clientX, e.clientY);
-
-    if (p.x !== hoverX || p.y !== hoverY) {
-        hoverX = p.x;
-        hoverY = p.y;
+    if (data.type === "hovers") {
+        remoteHovers.length = 0;
+        remoteHovers.push(...data.hovers);
         needsRender = true;
     }
 };
@@ -192,6 +196,9 @@ canvas.onclick = (e) => {
 
     const color = selectedColor;
 
+    const i = y * SIZE + x;
+    if (grid[i] === color) return;
+
     ws.send(JSON.stringify({
         type: "place",
         x, y, color
@@ -206,23 +213,29 @@ window.onmouseup = () => {
     dragging = false;
 };
 
-window.onmousemove = (e) => {
-    if (!dragging) return;
+window.addEventListener("mousemove", (e) => {
+    const p = screenToWorld(e.clientX, e.clientY);
 
-    const dx = e.clientX - lastX;
-    const dy = e.clientY - lastY;
+    hoverX = p.x;
+    hoverY = p.y;
 
-    if (dx !== 0 || dy !== 0) {
-        didDrag = true;
+    if (dragging) {
+        const dx = e.clientX - lastX;
+        const dy = e.clientY - lastY;
+
+        if (dx !== 0 || dy !== 0) {
+            didDrag = true;
+        }
+
+        camera.x -= dx / camera.zoom;
+        camera.y -= dy / camera.zoom;
+
+        lastX = e.clientX;
+        lastY = e.clientY;
     }
 
-    camera.x -= dx / camera.zoom;
-    camera.y -= dy / camera.zoom;
     needsRender = true;
-
-    lastX = e.clientX;
-    lastY = e.clientY;
-};
+});
 
 canvas.addEventListener("wheel", (e) => {
     e.preventDefault();
@@ -297,12 +310,34 @@ function render() {
 
     // hover
     if (hoverX >= 0 && hoverX < SIZE && hoverY >= 0 && hoverY < SIZE) {
+        canvas.style.cursor = "crosshair";
+
         ctx.strokeStyle = colors[selectedColor];
         ctx.lineWidth = 2;
 
         ctx.strokeRect(
             (hoverX - camera.x) * camera.zoom,
             (hoverY - camera.y) * camera.zoom,
+            camera.zoom,
+            camera.zoom
+        );
+    } else {
+        canvas.style.cursor = "default";
+    }
+
+    // remote hovers
+    for (const h of remoteHovers) {
+        if (
+            h.x < 0 || h.x >= SIZE ||
+            h.y < 0 || h.y >= SIZE
+        ) continue;
+    
+        ctx.strokeStyle = colors[h.color] ?? "#ffffff";
+        ctx.lineWidth = 2;
+    
+        ctx.strokeRect(
+            (h.x - camera.x) * camera.zoom,
+            (h.y - camera.y) * camera.zoom,
             camera.zoom,
             camera.zoom
         );
@@ -323,6 +358,17 @@ setInterval(() => {
         cooldownEl.innerText = "Ready";
         cooldownEl.style.backgroundColor = "#009000";
     }
+}, 200);
+
+setInterval(() => {
+    if (!ws || ws.readyState !== 1) return;
+
+    ws.send(JSON.stringify({
+        type: "hover",
+        x: hoverX,
+        y: hoverY,
+        color: selectedColor
+    }));
 }, 200);
 
 render();
