@@ -193,7 +193,7 @@ canvas.onclick = (e) => {
     const now = Date.now();
     if (!isAdmin && now < nextAllowedTime) return;
 
-    const p = screenToWorld(e.clientX, e.clientY);
+    const p = screenToGrid(e.clientX, e.clientY);
 
     const x = p.x;
     const y = p.y;
@@ -220,8 +220,7 @@ window.onmouseup = () => {
 };
 
 window.addEventListener("mousemove", (e) => {
-    const p = screenToWorld(e.clientX, e.clientY);
-
+    const p = screenToGrid(e.clientX, e.clientY);
     hoverX = p.x;
     hoverY = p.y;
 
@@ -298,12 +297,18 @@ function worldToScreen(x, y) {
 function screenToWorld(clientX, clientY) {
     const rect = canvas.getBoundingClientRect();
 
-    const x = (clientX - rect.left) / camera.zoom + camera.x;
-    const y = (clientY - rect.top) / camera.zoom + camera.y;
+    return {
+        x: (clientX - rect.left) / camera.zoom + camera.x,
+        y: (clientY - rect.top) / camera.zoom + camera.y
+    };
+}
+
+function screenToGrid(clientX, clientY) {
+    const p = screenToWorld(clientX, clientY);
 
     return {
-        x: Math.floor(x),
-        y: Math.floor(y)
+        x: Math.floor(p.x),
+        y: Math.floor(p.y)
     };
 }
 
