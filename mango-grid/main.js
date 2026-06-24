@@ -269,6 +269,25 @@ document.getElementById("authBtn").onclick = () => {
     }));
 };
 
+document.getElementById("exportBtn").onclick = () => {
+    const now = new Date();
+
+    const pad = (n) => n.toString().padStart(2, "0");
+
+    const filename =
+        `grid_${now.getFullYear()}-` +
+        `${pad(now.getMonth() + 1)}-` +
+        `${pad(now.getDate())}_` +
+        `${pad(now.getHours())}-` +
+        `${pad(now.getMinutes())}-` +
+        `${pad(now.getSeconds())}.png`;
+
+    const link = document.createElement("a");
+    link.download = filename;
+    link.href = off.toDataURL("image/png");
+    link.click();
+};
+
 function worldToScreen(x, y) {
     return {
         x: (x - camera.x) * camera.zoom,

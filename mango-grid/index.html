@@ -16,15 +16,26 @@
             left: 0;
             z-index: 1;
         }
-        #palette {
+        button {
+            cursor: pointer;
+        }
+        #topLeftUI {
             position: absolute;
+            top: 0;
+            left: 0;
+            display: flex;
+            flex-flow: row wrap;
+            gap: 10px;
+            margin: 0;
+            padding: 10px;
+            z-index: 999;
+        }
+        #palette {
             display: flex;
             gap: 5px;
-            z-index: 999;
-            top: 10px;
-            left: 10px;
+            padding: 5px;
             background-color: #444;
-            border: 5px solid #444;
+            border: none;
             border-radius: 10px;
         }
         #palette button {
@@ -32,12 +43,17 @@
             height: 24px;
             border: none;
             border-radius: 5px;
-            cursor: pointer;
             transition: 0.2s ease;
         }
         #palette button.selected {
             transform: scale(0.6);
             border-radius: 50%;
+        }
+        #exportBtn {
+            background-color: #444;
+            color: #fff;
+            border: none;
+            border-radius: 10px;
         }
         #cooldown {
             position: absolute;
@@ -102,7 +118,10 @@
 </head>
 
 <body>
-    <div id="palette"></div>
+    <div id="topLeftUI">
+        <div id="palette"></div>
+        <button id="exportBtn">Export Grid</button>
+    </div>
     <p id="cooldown">Cooldown: 5s</p>
     <div id="onlineCount">Online: 1</div>
     <div id="loader">
