@@ -128,15 +128,11 @@ ws.onmessage = (e) => {
         const i = y * SIZE + x;
         grid[i] = color;
     
-        const p = i * 4;
         const [r, g, b] = colorRGB[color];
     
-        pixels[p] = r;
-        pixels[p + 1] = g;
-        pixels[p + 2] = b;
-        pixels[p + 3] = 255;
-
-        offCtx.putImageData(imageData, 0, 0);
+        // draw ONLY the changed pixel
+        offCtx.fillStyle = `rgb(${r}, ${g}, ${b})`;
+        offCtx.fillRect(x, y, 1, 1);
     
         needsRender = true;
     }
