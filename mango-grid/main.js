@@ -34,11 +34,23 @@ let selectedColor = 0;
 
 const paletteDiv = document.getElementById("palette");
 
+const colorButtons = [];
+
 colors.forEach((c, i) => {
     const btn = document.createElement("button");
     btn.style.background = c;
-    btn.onclick = () => selectedColor = i;
+
+    btn.onclick = () => {
+        selectedColor = i;
+        for (const b of colorButtons) {
+            b.classList.remove("selected");
+        }
+
+        btn.classList.add("selected");
+    };
+
     paletteDiv.appendChild(btn);
+    colorButtons.push(btn);
 });
 
 const colorRGB = colors.map(c => [
@@ -176,6 +188,8 @@ canvas.onclick = (e) => {
     const x = p.x;
     const y = p.y;
 
+    if (x < 0 || x >= SIZE || y < 0 || y >= SIZE) return;
+
     const color = selectedColor;
 
     ws.send(JSON.stringify({
@@ -282,7 +296,7 @@ function render() {
     );
 
     // hover
-    if (hoverX >= 0 && hoverY >= 0) {
+    if (hoverX >= 0 && hoverX < SIZE && hoverY >= 0 && hoverY < SIZE) {
         ctx.strokeStyle = colors[selectedColor];
         ctx.lineWidth = 2;
 

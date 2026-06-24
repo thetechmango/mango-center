@@ -31,7 +31,13 @@
             width: 24px;
             height: 24px;
             border: none;
-            border-radius: 5px; 
+            border-radius: 5px;
+            cursor: pointer;
+            transition: 0.2s ease;
+        }
+        #palette button.selected {
+            transform: scale(0.6);
+            border-radius: 50%;
         }
         #cooldown {
             position: absolute;
