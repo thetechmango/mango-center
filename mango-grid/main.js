@@ -1,4 +1,4 @@
-const SIZE = 1024;
+const SIZE = 4096;
 const canvas = document.getElementById("canvas");
 const ctx = canvas.getContext("2d");
 ctx.imageSmoothingEnabled = false;
