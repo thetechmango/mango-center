@@ -53,6 +53,8 @@ const paletteDiv = document.getElementById("palette");
 
 const selectSound = new Audio("select.mp3");
 selectSound.preload = "auto";
+const placeSound = new Audio("place.mp3");
+selectSound.preload = "auto";
 
 const colorButtons = [];
 
@@ -265,6 +267,10 @@ canvas.onclick = (e) => {
     const packed = colorPacked[selectedColor] >>> 0;
 
     if ((current & 0x00FFFFFF) === (packed & 0x00FFFFFF)) return;
+
+    // play sound
+    const s = placeSound.cloneNode();
+    s.play();
 
     ws.send(JSON.stringify({
         type: "place",
