@@ -31,6 +31,17 @@
             padding: 10px;
             z-index: 999;
         }
+        #topRightUI {
+            position: absolute;
+            top: 0;
+            right: 0;
+            display: flex;
+            flex-flow: row wrap;
+            gap: 10px;
+            margin: 0;
+            padding: 10px;
+            z-index: 999;
+        }
         #palette {
             display: flex;
             gap: 5px;
@@ -59,13 +70,18 @@
             margin: 0;
         }
         #cooldown {
-            position: absolute;
-            top: 10px;
-            right:  10px;
             margin: 0;
             padding: 5px;
             background-color: #444;
-            border-radius: 5px; 
+            border-radius: 10px; 
+            color: #fff;
+            z-index: 999;
+        }
+        #coords {
+            margin: 0;
+            padding: 5px;
+            background-color: #444;
+            border-radius: 10px; 
             color: #fff;
             z-index: 999;
         }
@@ -125,7 +141,10 @@
         <div id="palette"></div>
         <button id="exportBtn">Export Grid</button>
     </div>
-    <p id="cooldown">Cooldown: 5s</p>
+    <div id="topRightUI">
+        <p id="coords">(-, -)</p>
+        <p id="cooldown">Cooldown: 5s</p>
+    </div>
     <div id="onlineCount">Online: 1</div>
     <div id="loader">
         <div class="spinner"></div>

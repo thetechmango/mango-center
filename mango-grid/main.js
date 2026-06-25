@@ -177,6 +177,8 @@ ws.onmessage = (e) => {
 canvas.onmouseleave = () => {
     hoverX = -1;
     hoverY = -1;
+
+    coordsDisplay.innerText = `(-, -)`;
 };
 
 canvas.onmousedown = (e) => {
@@ -219,10 +221,18 @@ window.onmouseup = () => {
     dragging = false;
 };
 
+const coordsDisplay = document.getElementById("coords");
+
 window.addEventListener("mousemove", (e) => {
     const p = screenToGrid(e.clientX, e.clientY);
     hoverX = p.x;
     hoverY = p.y;
+
+    if (p.x >= 0 && p.x < SIZE && p.y >= 0 && p.y < SIZE) {
+        coordsDisplay.innerText = `(${p.x}, ${p.y})`;
+    } else {
+        coordsDisplay.innerText = `(-, -)`;
+    }
 
     if (dragging) {
         const dx = e.clientX - lastX;
