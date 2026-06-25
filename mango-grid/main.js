@@ -42,6 +42,7 @@ function selectColor(index) {
         b.classList.remove("selected");
     }
     colorButtons[index].classList.add("selected");
+    needsRender = true;
 }
 
 colors.forEach((c, i) => {
@@ -301,7 +302,7 @@ canvas.addEventListener("wheel", (e) => {
         } else {
             selectColor(Math.min(colors.length - 1, selectedColor + 1));
         }
-        
+
         return;
     }
 
