@@ -27,10 +27,12 @@ const pixels32 = new Uint32Array(pixels.buffer);
 const grid = new Uint32Array(SIZE * SIZE);
 
 const colors = [
-    "#ffffff", "#AAAAAA", "#222222", "#000000",
-    "#ff0000", "#ff9000", "#ffff00", "#00ff00",
-    "#00ffff", "#0000ff", "#8000d0", "#ff00ff",
-    "#D2B48C", "#492403"
+    "#ffffff", "#AAAAAA", "#666666", "#222222", "#000000",
+    "#ff0000", "#700000", "#ff6000", "#ff9000", "#ffff00",
+    "#ffff80", "#00ff00", "#007000", "#a0f0a0", "#00ffb0",
+    "#00ffff", "#00a0ff", "#acdbff", "#0000ff", "#000070",
+    "#8000d0", "#cd97ef", "#ff00ff",
+    "#f7e1c5", "#caaa81", "#98713e", "#5b390e", "#492403"
 ];
 
 const colorPacked = colors.map(c => {
