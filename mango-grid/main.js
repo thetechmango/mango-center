@@ -1,7 +1,7 @@
 const SIZE = 4096;
 const canvas = document.getElementById("canvas");
 const ctx = canvas.getContext("2d");
-ctx.imageSmoothingEnabled = true;
+ctx.imageSmoothingEnabled = false;
 
 const off = document.createElement("canvas");
 off.width = SIZE;
@@ -36,17 +36,20 @@ const paletteDiv = document.getElementById("palette");
 
 const colorButtons = [];
 
+function selectColor(index) {
+    selectedColor = index;
+    for (const b of colorButtons) {
+        b.classList.remove("selected");
+    }
+    colorButtons[index].classList.add("selected");
+}
+
 colors.forEach((c, i) => {
     const btn = document.createElement("button");
     btn.style.background = c;
 
     btn.onclick = () => {
-        selectedColor = i;
-        for (const b of colorButtons) {
-            b.classList.remove("selected");
-        }
-
-        btn.classList.add("selected");
+        selectColor(i);
     };
 
     paletteDiv.appendChild(btn);
@@ -70,6 +73,36 @@ const camera = {
 
 camera.x = SIZE / 2 - (canvas.width / camera.zoom) / 2;
 camera.y = SIZE / 2 - (canvas.height / camera.zoom) / 2;
+
+function saveView() {
+    localStorage.setItem("view", JSON.stringify({
+        x: Math.max(Math.min(camera.x, SIZE * 2), -SIZE),
+        y: Math.max(Math.min(camera.y, SIZE * 2), -SIZE),
+        zoom: Math.max(Math.min(camera.zoom, 512), 0.1)
+    }));
+}
+
+function loadView() {
+    const saved = localStorage.getItem("view");
+    if (!saved) return;
+
+    try {
+        const { x, y, zoom } = JSON.parse(saved);
+
+        if (
+            typeof x === "number" &&
+            typeof y === "number" &&
+            typeof zoom === "number"
+        ) {
+            camera.x = x;
+            camera.y = y;
+            camera.zoom = zoom;
+        }
+    } catch {}
+}
+loadView();
+
+let lastViewSaveTime = 0;
 
 let hoverX = -1;
 let hoverY = -1;
@@ -218,6 +251,13 @@ canvas.onclick = (e) => {
 };
 
 window.onmouseup = () => {
+    if (dragging) {
+        const now = Date.now();
+        if (now - lastViewSaveTime > 200) {
+            saveView();
+            lastViewSaveTime = now;
+        }
+    }
     dragging = false;
 };
 
@@ -255,6 +295,16 @@ window.addEventListener("mousemove", (e) => {
 canvas.addEventListener("wheel", (e) => {
     e.preventDefault();
 
+    if (e.shiftKey) {
+        if (e.deltaY < 0) {
+            selectColor(Math.max(0, selectedColor - 1));
+        } else {
+            selectColor(Math.min(colors.length - 1, selectedColor + 1));
+        }
+        
+        return;
+    }
+
     const scale = 1.1;
 
     const before = screenToWorld(e.clientX, e.clientY);
@@ -267,6 +317,12 @@ canvas.addEventListener("wheel", (e) => {
     camera.x += before.x - after.x;
     camera.y += before.y - after.y;
     needsRender = true;
+
+    const now = Date.now();
+    if (now - lastViewSaveTime > 200) {
+        saveView();
+        lastViewSaveTime = now;
+    }
 });
 
 document.getElementById("authBtn").onclick = () => {
