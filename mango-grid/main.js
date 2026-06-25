@@ -22,17 +22,31 @@ resize();
 
 const imageData = ctx.createImageData(SIZE, SIZE);
 const pixels = imageData.data;
+const pixels32 = new Uint32Array(pixels.buffer);
+
+const grid = new Uint32Array(SIZE * SIZE);
 
 const colors = [
-    "#ffffff", "#000000", "#ff0000", "#00ff00",
-    "#0000ff", "#ffff00", "#ff00ff", "#00ffff",
-    "#AAAAAA", "#222222", "#ff9000", "#8000d0",
+    "#ffffff", "#AAAAAA", "#222222", "#000000",
+    "#ff0000", "#ff9000", "#ffff00", "#00ff00",
+    "#00ffff", "#0000ff", "#8000d0", "#ff00ff",
     "#D2B48C", "#492403"
 ];
+
+const colorPacked = colors.map(c => {
+    const r = parseInt(c.slice(1, 3), 16);
+    const g = parseInt(c.slice(3, 5), 16);
+    const b = parseInt(c.slice(5, 7), 16);
+
+    return (r) | (g << 8) | (b << 16) | (255 << 24);
+});
 
 let selectedColor = 0;
 
 const paletteDiv = document.getElementById("palette");
+
+const selectSound = new Audio("select.mp3");
+selectSound.preload = "auto";
 
 const colorButtons = [];
 
@@ -42,6 +56,10 @@ function selectColor(index) {
         b.classList.remove("selected");
     }
     colorButtons[index].classList.add("selected");
+
+    const s = selectSound.cloneNode();
+    s.play();
+
     needsRender = true;
 }
 
@@ -59,12 +77,6 @@ colors.forEach((c, i) => {
 
 // Initialize with selected
 colorButtons[selectedColor].classList.add("selected");
-
-const colorRGB = colors.map(c => [
-    parseInt(c.slice(1, 3), 16),
-    parseInt(c.slice(3, 5), 16),
-    parseInt(c.slice(5, 7), 16)
-]);
 
 const camera = {
     x: 0,
@@ -119,8 +131,6 @@ let lastX = 0;
 let lastY = 0;
 let didDrag = false;
 
-const grid = new Uint8Array(SIZE * SIZE);
-
 const ws = new WebSocket("wss://ws.themango.click");
 ws.binaryType = "arraybuffer";
 let nextAllowedTime = 0;
@@ -130,7 +140,8 @@ let isAdmin = false;
 const COOLDOWN_MS = 5000;
 
 function drawPixel(x, y, color) {
-    ctx.fillStyle = colors[color];
+    ctx.fillStyle =
+    `#${(color & 0xFFFFFF).toString(16).padStart(6, "0")}`;
 
     ctx.fillRect(
         x * camera.zoom + camera.x,
@@ -142,23 +153,17 @@ function drawPixel(x, y, color) {
 
 ws.onmessage = (e) => {
     if (typeof e.data !== "string") {
-        const arr = new Uint8Array(e.data);
+        const arr = new Uint32Array(e.data);
+        console.log("received bytes:", e.data.byteLength);
 
         grid.set(arr);
-
-        for (let i = 0; i < grid.length; i++) {
-            const [r, g, b] = colorRGB[grid[i]];
-            const p = i * 4;
-
-            pixels[p] = r;
-            pixels[p + 1] = g;
-            pixels[p + 2] = b;
-            pixels[p + 3] = 255;
-        }
+        pixels32.set(grid);
 
         offCtx.putImageData(imageData, 0, 0);
         needsRender = true;
+
         document.getElementById("loader").style.display = "none";
+
         return;
     }
 
@@ -184,13 +189,15 @@ ws.onmessage = (e) => {
 
     if (data.type === "place") {
         const { x, y, color } = data;
-    
+
         const i = y * SIZE + x;
         grid[i] = color;
-    
-        const [r, g, b] = colorRGB[color];
-    
-        offCtx.fillStyle = `rgb(${r}, ${g}, ${b})`;
+
+        const r = color & 255;
+        const g = (color >> 8) & 255;
+        const b = (color >> 16) & 255;
+
+        offCtx.fillStyle = `rgb(${r},${g},${b})`;
         offCtx.fillRect(x, y, 1, 1);
     
         needsRender = true;
@@ -236,14 +243,18 @@ canvas.onclick = (e) => {
 
     if (x < 0 || x >= SIZE || y < 0 || y >= SIZE) return;
 
-    const color = selectedColor;
-
     const i = y * SIZE + x;
-    if (grid[i] === color) return;
+
+    const current = grid[i] >>> 0;
+    const packed = colorPacked[selectedColor] >>> 0;
+
+    if ((current & 0x00FFFFFF) === (packed & 0x00FFFFFF)) return;
 
     ws.send(JSON.stringify({
         type: "place",
-        x, y, color
+        x,
+        y,
+        color: packed
     }));
 
     if (!isAdmin) {
@@ -429,7 +440,11 @@ function render() {
             h.y < 0 || h.y >= SIZE
         ) continue;
     
-        ctx.strokeStyle = colors[h.color] ?? "#ffffff";
+        const r = h.color & 255;
+        const g = (h.color >> 8) & 255;
+        const b = (h.color >> 16) & 255;
+
+        ctx.strokeStyle = `rgb(${r},${g},${b})`;
         ctx.lineWidth = 2;
     
         ctx.strokeRect(
@@ -473,7 +488,7 @@ setInterval(() => {
         type: "hover",
         x: hoverX,
         y: hoverY,
-        color: selectedColor
+        color: colorPacked[selectedColor]
     }));
 }, 200);
 
