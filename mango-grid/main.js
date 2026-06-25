@@ -1,4 +1,5 @@
 const SIZE = 4096;
+const GRID_BYTES = SIZE * SIZE * 4;
 const canvas = document.getElementById("canvas");
 const ctx = canvas.getContext("2d");
 ctx.imageSmoothingEnabled = false;
@@ -25,6 +26,9 @@ const pixels = imageData.data;
 const pixels32 = new Uint32Array(pixels.buffer);
 
 const grid = new Uint32Array(SIZE * SIZE);
+
+let gridBuffer = new ArrayBuffer(GRID_BYTES);
+let gridView = new Uint8Array(gridBuffer);
 
 const colors = [
     "#ffffff", "#AAAAAA", "#666666", "#222222", "#000000",
@@ -153,17 +157,27 @@ function drawPixel(x, y, color) {
     );
 }
 
-ws.onmessage = (e) => {
+ws.onmessage = async (e) => {
     if (typeof e.data !== "string") {
-        const arr = new Uint32Array(e.data);
-        console.log("received bytes:", e.data.byteLength);
+
+        const ds = new DecompressionStream("deflate-raw");
+
+        const stream = new Blob([e.data])
+            .stream()
+            .pipeThrough(ds);
+
+        const decompressed = await new Response(stream).arrayBuffer();
+
+        console.log("DECOMPRESSED:", decompressed.byteLength);
+
+        const arr = new Uint32Array(decompressed);
 
         grid.set(arr);
         pixels32.set(grid);
 
         offCtx.putImageData(imageData, 0, 0);
-        needsRender = true;
 
+        needsRender = true;
         document.getElementById("loader").style.display = "none";
 
         return;
