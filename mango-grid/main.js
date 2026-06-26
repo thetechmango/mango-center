@@ -233,14 +233,14 @@ ws.onmessage = async (e) => {
     }
 };
 
-canvas.onmouseleave = () => {
+canvas.onpointerleave = () => {
     hoverX = -1;
     hoverY = -1;
 
     coordsDisplay.innerText = `(-, -)`;
 };
 
-canvas.onmousedown = (e) => {
+canvas.onpointerdown = (e) => {
     dragging = true;
     didDrag = false;
 
@@ -284,7 +284,7 @@ canvas.onclick = (e) => {
     }
 };
 
-window.onmouseup = () => {
+window.onpointerup = () => {
     if (dragging) {
         const now = Date.now();
         if (now - lastViewSaveTime > 200) {
@@ -297,7 +297,7 @@ window.onmouseup = () => {
 
 const coordsDisplay = document.getElementById("coords");
 
-window.addEventListener("mousemove", (e) => {
+window.addEventListener("pointermove", (e) => {
     const p = screenToGrid(e.clientX, e.clientY);
     hoverX = p.x;
     hoverY = p.y;
