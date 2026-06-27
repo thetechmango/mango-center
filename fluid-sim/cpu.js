@@ -32,7 +32,7 @@ const idx = (x, y) => y * width + x;
 const friction = 0.99;
 const fade = 0.99;
 
-canvas.addEventListener('mousemove', (e) => {
+canvas.addEventListener('pointermove', (e) => {
     const rect = canvas.getBoundingClientRect();
     const x = Math.floor(((e.clientX - rect.left) / rect.width) * width);
     const y = Math.floor(((e.clientY - rect.top) / rect.height) * height);

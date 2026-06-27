@@ -51,7 +51,7 @@ window.addEventListener("keyup", (e) => {
     keysDown.delete(key);
 });
 
-canvas.addEventListener("mousedown", (e) => {
+canvas.addEventListener("pointerdown", (e) => {
     isDragging = true;
     dragButton = e.button;
 
@@ -101,7 +101,7 @@ canvas.addEventListener("mousedown", (e) => {
     }
 });
 
-canvas.addEventListener("mousemove", (e) => {
+canvas.addEventListener("pointermove", (e) => {
     const rect = canvas.getBoundingClientRect();
     mouseX = e.clientX - rect.left;
     mouseY = e.clientY - rect.top;
@@ -135,16 +135,16 @@ canvas.addEventListener("mousemove", (e) => {
     }
 });
 
-canvas.addEventListener("mouseenter", () => {
+canvas.addEventListener("pointerenter", () => {
     mouseInCanvas = true;
 });
 
-canvas.addEventListener("mouseleave", () => {
+canvas.addEventListener("pointerleave", () => {
     mouseInCanvas = false;
     render(); // clear the ghost preview
 });
 
-window.addEventListener("mouseup", () => {
+window.addEventListener("pointerup", () => {
     isDragging = false;
     dragButton = -1;
     lastInteractedId = null;

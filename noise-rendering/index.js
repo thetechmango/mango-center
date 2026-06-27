@@ -5,8 +5,12 @@ const mainCtx = main.getContext("2d", { willReadFrequently: true });
 const maskCtx = mask.getContext("2d", { willReadFrequently: true });
 
 let paused = false;
-const noiseType = "normal"; // normal, binary, color, rgb
-const motionType = "randomize" // randomize, up, down, left, right
+
+const noiseTypes = ["normal", "binary", "color", "rgb"];
+const motionTypes = ["randomize", "up", "down", "left", "right"];
+
+let noiseType = 0;
+let motionType = 0;
 
 // Resize canvases
 function resize() {
@@ -28,9 +32,20 @@ window.addEventListener("keydown", (e) => {
     if (e.key === " ") paused = !paused;
 });
 
+window.addEventListener("pointerdown", (e) => {
+    if (motionType < motionTypes.length - 1) {
+        motionType++;
+    } else {
+        motionType = 0;
+        noiseType = (noiseType + 1) % noiseTypes.length;
+        initStaticNoise();
+    }
+});
+
 // Generate a noise pixel
 function getNoiseColor() {
-    switch (noiseType) {
+    const noise = noiseTypes[noiseType];
+    switch (noise) {
         case "normal": {
             const v = Math.random() * 255;
             return { r: v, g: v, b: v };
@@ -91,7 +106,9 @@ function applyNoiseMask() {
 
         let src = i;
 
-        switch (motionType) {
+        const motion = motionTypes[motionType];
+
+        switch (motion) {
             case "up":
                 src = i + w * 4;
                 break;

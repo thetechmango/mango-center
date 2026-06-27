@@ -1985,22 +1985,9 @@ for(let i = 0; i < 10; i++) {
 }
 */
 
-canvas.addEventListener("mousedown", handlePointerDown);
-canvas.addEventListener("mousemove", handlePointerMove);
-canvas.addEventListener("mouseup", handlePointerUp);
-
-canvas.addEventListener("touchstart", (e) => {
-  e.preventDefault();
-  handlePointerDown(e);
-});
-canvas.addEventListener("touchmove", (e) => {
-  e.preventDefault();
-  handlePointerMove(e);
-});
-canvas.addEventListener("touchend", (e) => {
-  e.preventDefault();
-  handlePointerUp(e);
-});
+canvas.addEventListener("pointerdown", handlePointerDown);
+canvas.addEventListener("pointermove", handlePointerMove);
+canvas.addEventListener("pointerup", handlePointerUp);
 
 
 function mainLoop() {

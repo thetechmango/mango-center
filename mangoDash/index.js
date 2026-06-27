@@ -391,13 +391,6 @@ class Player {
                 this.updateWaveTrail(); // can't find a better solution
             }
 
-            // Add current position to trail every 10 frames (old)
-            /* Instead, we are going to add them on mousedown or up or when gravity changes
-            if (simFrameCount % 10 === 0) {
-                this.trail.push({ x: this.x, y: this.y });
-            }
-            */
-
             // Remove points that are off screen AND their connected point is off screen
             const leftEdge = camera.toWorldX(0); // world coordinate of screen's left edge
 
@@ -1420,21 +1413,19 @@ fillBlocks(inBlocks(234), -inBlocks(6), inBlocks(244), -inBlocks(6));
 let isPressing = false;
 let cancelPress = false;
 
-document.addEventListener("mousedown", (e) => {
+document.addEventListener("pointerdown", (e) => {
     if(e.button === 0) {
         isPressing = true;
 
         player.updateWaveTrail();
-        console.log(isPressing);
     } 
 })
-document.addEventListener("mouseup", (e) => {
+document.addEventListener("pointerup", (e) => {
     if(e.button === 0) {
         isPressing = false;
         cancelPress = false;
 
         player.updateWaveTrail();
-        console.log(isPressing);
     } 
 })
 
@@ -1447,7 +1438,6 @@ document.addEventListener("keydown", (e) => {
         isPressing = true;
 
         player.updateWaveTrail();
-        console.log(isPressing);
     }
 
     if (e.key === "+") camera.zoom *= 1.1; // zoom in
@@ -1461,7 +1451,6 @@ document.addEventListener("keyup", (e) => {
         cancelPress = false;
 
         player.updateWaveTrail();
-        console.log(isPressing);
     }
 })
 

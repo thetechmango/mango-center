@@ -4,7 +4,6 @@ const ctx = canvas.getContext('2d');
 const width = 1000; 
 const height = Math.floor(window.innerHeight / (window.innerWidth / width));
 
-// 2. Set the canvas's INTERNAL resolution to match the sim
 canvas.width = width;
 canvas.height = height;
 
@@ -36,9 +35,9 @@ window.addEventListener('keydown', (e) => {
     }
 });
 window.addEventListener('keyup', (e) => { if (e.key === "Shift") isShiftDown = false; });
-canvas.addEventListener('mousedown', (e) => activeButtons = e.buttons);
-canvas.addEventListener('mouseup', () => activeButtons = 0);
-canvas.addEventListener('mousemove', (e) => {
+canvas.addEventListener('pointerdown', (e) => activeButtons = e.buttons);
+canvas.addEventListener('pointerup', () => activeButtons = 0);
+canvas.addEventListener('pointermove', (e) => {
     activeButtons = e.buttons;
     const rect = canvas.getBoundingClientRect();
     mousePos.x = Math.floor(((e.clientX - rect.left) / rect.width) * width);

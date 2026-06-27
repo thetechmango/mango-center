@@ -266,20 +266,20 @@ let mouse = { x: 0.5, y: 0.5,
     right: { down: false }
 };
 
-canvas.addEventListener("mousemove", e => {
+canvas.addEventListener("pointermove", e => {
     const rect = canvas.getBoundingClientRect();
     mouse.x = (e.clientX - rect.left) / rect.width;   // normalize to [0,1]
     mouse.y = (e.clientY - rect.top) / rect.height;
 });
 
-canvas.addEventListener("mousedown", (e) => {
+canvas.addEventListener("pointerdown", (e) => {
     if (e.button === 0) {
         mouse.left.down = true;
     } else if (e.button === 2) {
         mouse.right.down = true;
     }
 });
-canvas.addEventListener("mouseup",   (e) => {
+canvas.addEventListener("pointerup",   (e) => {
     if (e.button === 0) {
         mouse.left.down = false;
     } else if (e.button === 2) {
