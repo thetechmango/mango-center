@@ -339,14 +339,18 @@ canvas.addEventListener("wheel", (e) => {
         return;
     }
 
+    zoom(e.deltaY < 0 ? "in" : "out", e.clientX, e.clientY);
+});
+
+function zoom(dir = "in", x, y) {
     const scale = 1.1;
 
-    const before = screenToWorld(e.clientX, e.clientY);
+    const before = screenToWorld(x, y);
 
-    if (e.deltaY < 0) camera.zoom *= scale;
+    if (dir === "in") camera.zoom *= scale;
     else camera.zoom /= scale;
 
-    const after = screenToWorld(e.clientX, e.clientY);
+    const after = screenToWorld(x, y);
 
     camera.x += before.x - after.x;
     camera.y += before.y - after.y;
@@ -357,6 +361,14 @@ canvas.addEventListener("wheel", (e) => {
         saveView();
         lastViewSaveTime = now;
     }
+}
+
+document.getElementById("zoomInBtn").addEventListener("click", (e) => {
+    zoom("in", canvas.width/2, canvas.height/2);
+});
+
+document.getElementById("zoomOutBtn").addEventListener("click", (e) => {
+    zoom("out", canvas.width/2, canvas.height/2);
 });
 
 document.getElementById("authBtn").onclick = () => {

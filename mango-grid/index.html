@@ -124,6 +124,7 @@
             z-index: 9999;
             font-family: sans-serif;
         }
+
         .spinner {
             width: 40px;
             height: 40px;
@@ -132,6 +133,52 @@
             border-radius: 50%;
             animation: spin 1s linear infinite;
             margin-bottom: 10px;
+        }
+
+        #zoom-btns {
+            display: none;
+
+            position: fixed;
+            top: 50%;
+            right: 5px;
+            transform: translateY(-50%);
+            
+            flex-direction: column;
+            gap: 2px;
+
+            background-color: #444;
+            padding: 2px;
+            border-radius: 999px;
+            z-index: 999;
+        }
+
+
+        #zoom-btns button {
+            width: 40px;
+            height: 40px;
+
+            padding: 0;
+
+            display: flex;              /* ← key */
+            align-items: center;        /* vertical center */
+            justify-content: center;    /* horizontal center */
+
+            background: none;
+            border: none;
+            border-radius: 50%;
+
+            background-color: #555;
+            color: white;
+            font-size: 18px;
+
+            user-select: none;
+            -webkit-tap-highlight-color: transparent;
+        }
+
+        @media (pointer: coarse) {
+            #zoom-btns {
+                display: flex;
+            }
         }
 
         @keyframes spin {
@@ -145,21 +192,30 @@
         <div id="palette"></div>
         <button id="exportBtn">Export Grid</button>
     </div>
+
     <div id="topRightUI">
         <p id="coords">(-, -)</p>
         <p id="cooldown">Cooldown: 5s</p>
     </div>
+
     <div id="onlineCount">Online: 1</div>
+
     <div id="loader">
         <div class="spinner"></div>
         Loading grid...
-        </div>
+    </div>
+
     <div id="adminPanel">
         <input id="adminCode" type="password" placeholder="admin code">
         <button id="authBtn">Auth</button>
     </div>
-    <canvas id="canvas" width="1024" height="1024"></canvas>
 
+    <div id="zoom-btns">
+        <button id="zoomInBtn">+</button>
+        <button id="zoomOutBtn">-</button>
+    </div>
+
+    <canvas id="canvas" width="1024" height="1024"></canvas>
     <script src="main.js"></script>
 </body>
 
