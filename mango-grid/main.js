@@ -1,5 +1,6 @@
 const SIZE = 4096;
 const GRID_BYTES = SIZE * SIZE * 4;
+
 const canvas = document.getElementById("canvas");
 const ctx = canvas.getContext("2d");
 ctx.imageSmoothingEnabled = false;
@@ -18,6 +19,7 @@ function resize() {
     canvas.height = window.innerHeight;
     needsRender = true;
 }
+
 window.addEventListener("resize", resize);
 resize();
 
@@ -53,16 +55,19 @@ const paletteDiv = document.getElementById("palette");
 
 const selectSound = new Audio("select.mp3");
 selectSound.preload = "auto";
+
 const placeSound = new Audio("place.mp3");
-selectSound.preload = "auto";
+placeSound.preload = "auto";
 
 const colorButtons = [];
 
 function selectColor(index) {
     selectedColor = index;
+
     for (const b of colorButtons) {
         b.classList.remove("selected");
     }
+
     colorButtons[index].classList.add("selected");
 
     const s = selectSound.cloneNode();
@@ -83,7 +88,6 @@ colors.forEach((c, i) => {
     colorButtons.push(btn);
 });
 
-// Initialize with selected
 colorButtons[selectedColor].classList.add("selected");
 
 const camera = {
@@ -121,6 +125,7 @@ function loadView() {
         }
     } catch {}
 }
+
 loadView();
 
 let lastViewSaveTime = 0;
@@ -134,6 +139,9 @@ let lastHoverY = null;
 const remoteHovers = [];
 let onlineCount = 1;
 
+// Unique ID assigned by the server
+let myId = null;
+
 let dragging = false;
 let lastX = 0;
 let lastY = 0;
@@ -141,6 +149,7 @@ let didDrag = false;
 
 const ws = new WebSocket("wss://ws.themango.click");
 ws.binaryType = "arraybuffer";
+
 let nextAllowedTime = 0;
 
 let isAdmin = false;
@@ -149,7 +158,7 @@ const COOLDOWN_MS = 5000;
 
 function drawPixel(x, y, color) {
     ctx.fillStyle =
-    `#${(color & 0xFFFFFF).toString(16).padStart(6, "0")}`;
+        `#${(color & 0xFFFFFF).toString(16).padStart(6, "0")}`;
 
     ctx.fillRect(
         x * camera.zoom + camera.x,
@@ -161,14 +170,14 @@ function drawPixel(x, y, color) {
 
 ws.onmessage = async (e) => {
     if (typeof e.data !== "string") {
-
         const ds = new DecompressionStream("deflate-raw");
 
         const stream = new Blob([e.data])
             .stream()
             .pipeThrough(ds);
 
-        const decompressed = await new Response(stream).arrayBuffer();
+        const decompressed =
+            await new Response(stream).arrayBuffer();
 
         console.log("DECOMPRESSED:", decompressed.byteLength);
 
@@ -180,12 +189,18 @@ ws.onmessage = async (e) => {
         offCtx.putImageData(imageData, 0, 0);
 
         needsRender = true;
+
         document.getElementById("loader").style.display = "none";
 
         return;
     }
 
     const data = JSON.parse(e.data);
+
+    if (data.type === "id") {
+        myId = data.id;
+        return;
+    }
 
     if (data.type === "auth") {
         if (data.success) {
@@ -199,10 +214,11 @@ ws.onmessage = async (e) => {
             alert("Wrong code");
         }
     }
-    
+
     if (data.type === "count") {
         onlineCount = data.count;
-        document.getElementById("onlineCount").textContent = `Online: ${data.count}`;
+        document.getElementById("onlineCount").textContent =
+            `Online: ${data.count}`;
     }
 
     if (data.type === "place") {
@@ -217,7 +233,7 @@ ws.onmessage = async (e) => {
 
         offCtx.fillStyle = `rgb(${r},${g},${b})`;
         offCtx.fillRect(x, y, 1, 1);
-    
+
         needsRender = true;
     }
 
@@ -227,8 +243,16 @@ ws.onmessage = async (e) => {
 
     if (data.type === "hovers") {
         if (onlineCount <= 1) return;
+
         remoteHovers.length = 0;
-        remoteHovers.push(...data.hovers);
+
+        for (const hover of data.hovers) {
+            // Discard our own hover
+            if (hover.id === myId) continue;
+
+            remoteHovers.push(hover);
+        }
+
         needsRender = true;
     }
 };
@@ -252,6 +276,7 @@ canvas.onclick = (e) => {
     if (didDrag) return;
 
     const now = Date.now();
+
     if (!isAdmin && now < nextAllowedTime) return;
 
     const p = screenToGrid(e.clientX, e.clientY);
@@ -268,7 +293,6 @@ canvas.onclick = (e) => {
 
     if ((current & 0x00FFFFFF) === (packed & 0x00FFFFFF)) return;
 
-    // play sound
     const s = placeSound.cloneNode();
     s.play();
 
@@ -287,11 +311,13 @@ canvas.onclick = (e) => {
 window.onpointerup = () => {
     if (dragging) {
         const now = Date.now();
+
         if (now - lastViewSaveTime > 200) {
             saveView();
             lastViewSaveTime = now;
         }
     }
+
     dragging = false;
 };
 
@@ -299,10 +325,16 @@ const coordsDisplay = document.getElementById("coords");
 
 window.addEventListener("pointermove", (e) => {
     const p = screenToGrid(e.clientX, e.clientY);
+
     hoverX = p.x;
     hoverY = p.y;
 
-    if (p.x >= 0 && p.x < SIZE && p.y >= 0 && p.y < SIZE) {
+    if (
+        p.x >= 0 &&
+        p.x < SIZE &&
+        p.y >= 0 &&
+        p.y < SIZE
+    ) {
         coordsDisplay.innerText = `(${p.x}, ${p.y})`;
     } else {
         coordsDisplay.innerText = `(-, -)`;
@@ -331,15 +363,23 @@ canvas.addEventListener("wheel", (e) => {
 
     if (e.shiftKey) {
         if (e.deltaY < 0) {
-            selectColor(Math.max(0, selectedColor - 1));
+            selectColor(
+                Math.max(0, selectedColor - 1)
+            );
         } else {
-            selectColor(Math.min(colors.length - 1, selectedColor + 1));
+            selectColor(
+                Math.min(colors.length - 1, selectedColor + 1)
+            );
         }
 
         return;
     }
 
-    zoom(e.deltaY < 0 ? "in" : "out", e.clientX, e.clientY);
+    zoom(
+        e.deltaY < 0 ? "in" : "out",
+        e.clientX,
+        e.clientY
+    );
 });
 
 function zoom(dir = "in", x, y) {
@@ -347,16 +387,21 @@ function zoom(dir = "in", x, y) {
 
     const before = screenToWorld(x, y);
 
-    if (dir === "in") camera.zoom *= scale;
-    else camera.zoom /= scale;
+    if (dir === "in") {
+        camera.zoom *= scale;
+    } else {
+        camera.zoom /= scale;
+    }
 
     const after = screenToWorld(x, y);
 
     camera.x += before.x - after.x;
     camera.y += before.y - after.y;
+
     needsRender = true;
 
     const now = Date.now();
+
     if (now - lastViewSaveTime > 200) {
         saveView();
         lastViewSaveTime = now;
@@ -364,11 +409,11 @@ function zoom(dir = "in", x, y) {
 }
 
 document.getElementById("zoomInBtn").addEventListener("click", (e) => {
-    zoom("in", canvas.width/2, canvas.height/2);
+    zoom("in", canvas.width / 2, canvas.height / 2);
 });
 
 document.getElementById("zoomOutBtn").addEventListener("click", (e) => {
-    zoom("out", canvas.width/2, canvas.height/2);
+    zoom("out", canvas.width / 2, canvas.height / 2);
 });
 
 document.getElementById("authBtn").onclick = () => {
@@ -394,6 +439,7 @@ document.getElementById("exportBtn").onclick = () => {
         `${pad(now.getSeconds())}.png`;
 
     const link = document.createElement("a");
+
     link.download = filename;
     link.href = off.toDataURL("image/png");
     link.click();
@@ -432,9 +478,21 @@ function render() {
 
     needsRender = false;
 
-    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    ctx.clearRect(
+        0,
+        0,
+        canvas.width,
+        canvas.height
+    );
+
     ctx.fillStyle = "#222222";
-    ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+    ctx.fillRect(
+        0,
+        0,
+        canvas.width,
+        canvas.height
+    );
 
     ctx.imageSmoothingEnabled = false;
 
@@ -450,8 +508,13 @@ function render() {
         canvas.height
     );
 
-    // hover
-    if (hoverX >= 0 && hoverX < SIZE && hoverY >= 0 && hoverY < SIZE) {
+    // Local hover
+    if (
+        hoverX >= 0 &&
+        hoverX < SIZE &&
+        hoverY >= 0 &&
+        hoverY < SIZE
+    ) {
         canvas.style.cursor = "crosshair";
 
         ctx.strokeStyle = colors[selectedColor];
@@ -467,20 +530,26 @@ function render() {
         canvas.style.cursor = "default";
     }
 
-    // remote hovers
+    // Remote hovers
     for (const h of remoteHovers) {
+        if (h.id === myId) continue;
+
         if (
-            h.x < 0 || h.x >= SIZE ||
-            h.y < 0 || h.y >= SIZE
-        ) continue;
-    
+            h.x < 0 ||
+            h.x >= SIZE ||
+            h.y < 0 ||
+            h.y >= SIZE
+        ) {
+            continue;
+        }
+
         const r = h.color & 255;
         const g = (h.color >> 8) & 255;
         const b = (h.color >> 16) & 255;
 
         ctx.strokeStyle = `rgb(${r},${g},${b})`;
         ctx.lineWidth = 2;
-    
+
         ctx.strokeRect(
             (h.x - camera.x) * camera.zoom,
             (h.y - camera.y) * camera.zoom,
@@ -495,10 +564,15 @@ function render() {
 const cooldownEl = document.getElementById("cooldown");
 
 setInterval(() => {
-    const remaining = Math.max(0, nextAllowedTime - Date.now());
-    
+    const remaining = Math.max(
+        0,
+        nextAllowedTime - Date.now()
+    );
+
     if (remaining > 0) {
-        cooldownEl.innerText = `Cooldown: ${Math.ceil(remaining/1000)}s`;
+        cooldownEl.innerText =
+            `Cooldown: ${Math.ceil(remaining / 1000)}s`;
+
         cooldownEl.style.backgroundColor = "#900000";
     } else {
         cooldownEl.innerText = "Ready";
@@ -513,9 +587,11 @@ setInterval(() => {
     if (
         hoverX === lastHoverX &&
         hoverY === lastHoverY
-    ) return;
+    ) {
+        return;
+    }
 
-    lastHoverX = hoverX;
+	lastHoverX = hoverX;
     lastHoverY = hoverY;
 
     ws.send(JSON.stringify({
