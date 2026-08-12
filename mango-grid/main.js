@@ -265,6 +265,32 @@ canvas.onpointerleave = () => {
 };
 
 canvas.onpointerdown = (e) => {
+    if (e.button === 1) {
+        e.preventDefault();
+
+        const p = screenToGrid(e.clientX, e.clientY);
+
+        if (
+            p.x >= 0 &&
+            p.x < SIZE &&
+            p.y >= 0 &&
+            p.y < SIZE
+        ) {
+            const color = grid[p.y * SIZE + p.x] >>> 0;
+
+            // Find the matching palette color
+            const index = colorPacked.findIndex(
+                c => (c & 0x00FFFFFF) === (color & 0x00FFFFFF)
+            );
+
+            if (index !== -1) {
+                selectColor(index);
+            }
+        }
+
+        return;
+    }
+
     dragging = true;
     didDrag = false;
 
@@ -273,6 +299,7 @@ canvas.onpointerdown = (e) => {
 };
 
 canvas.onclick = (e) => {
+    if (e.button !== 0) return;
     if (didDrag) return;
 
     const now = Date.now();
