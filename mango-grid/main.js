@@ -14,6 +14,8 @@ offCtx.imageSmoothingEnabled = false;
 
 let needsRender = true;
 
+const keys = {};
+
 function resize() {
     canvas.width = window.innerWidth;
     canvas.height = window.innerHeight;
@@ -435,6 +437,14 @@ function zoom(dir = "in", x, y) {
     }
 }
 
+window.addEventListener("keydown", (e) => {
+    keys[e.key.toLowerCase()] = true;
+});
+
+window.addEventListener("keyup", (e) => {
+    keys[e.key.toLowerCase()] = false;
+});
+
 document.getElementById("zoomInBtn").addEventListener("click", (e) => {
     zoom("in", canvas.width / 2, canvas.height / 2);
 });
@@ -497,7 +507,23 @@ function screenToGrid(clientX, clientY) {
     };
 }
 
-function render() {
+let lastTime = performance.now();
+
+function render(time) {
+    const dt = (time - lastTime) / 1000;
+    lastTime = time;
+
+    const speed = 1000 * dt / camera.zoom;
+
+    if (keys["w"]) camera.y -= speed;
+    if (keys["a"]) camera.x -= speed;
+    if (keys["s"]) camera.y += speed;
+    if (keys["d"]) camera.x += speed;
+
+    if (Object.values(keys).some(Boolean)) {
+        needsRender = true;
+    }
+
     if (!needsRender) {
         requestAnimationFrame(render);
         return;
