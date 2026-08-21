@@ -405,22 +405,17 @@ canvas.addEventListener("wheel", (e) => {
     }
 
     zoom(
-        e.deltaY < 0 ? "in" : "out",
+        e.deltaY < 0 ? 1.1 : 1 / 1.1,
         e.clientX,
         e.clientY
     );
 });
 
-function zoom(dir = "in", x, y) {
-    const scale = 1.1;
+function zoom(scale, x, y) {
 
     const before = screenToWorld(x, y);
 
-    if (dir === "in") {
-        camera.zoom *= scale;
-    } else {
-        camera.zoom /= scale;
-    }
+    camera.zoom *= scale;
 
     const after = screenToWorld(x, y);
 
@@ -446,11 +441,11 @@ window.addEventListener("keyup", (e) => {
 });
 
 document.getElementById("zoomInBtn").addEventListener("click", (e) => {
-    zoom("in", canvas.width / 2, canvas.height / 2);
+    zoom(1.2, canvas.width / 2, canvas.height / 2);
 });
 
 document.getElementById("zoomOutBtn").addEventListener("click", (e) => {
-    zoom("out", canvas.width / 2, canvas.height / 2);
+    zoom(1 / 1.2, canvas.width / 2, canvas.height / 2);
 });
 
 document.getElementById("authBtn").onclick = () => {
@@ -519,6 +514,11 @@ function render(time) {
     if (keys["a"]) camera.x -= speed;
     if (keys["s"]) camera.y += speed;
     if (keys["d"]) camera.x += speed;
+
+    const scale = 1.05 ** (dt * 60);
+
+    if (keys["e"]) zoom(scale, canvas.width / 2, canvas.height / 2);
+    if (keys["q"]) zoom(1 / scale, canvas.width / 2, canvas.height / 2);
 
     if (Object.values(keys).some(Boolean)) {
         needsRender = true;
@@ -655,4 +655,4 @@ setInterval(() => {
     }));
 }, 200);
 
-render();
+requestAnimationFrame(render);
