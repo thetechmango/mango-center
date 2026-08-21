@@ -35,7 +35,7 @@ let gridBuffer = new ArrayBuffer(GRID_BYTES);
 let gridView = new Uint8Array(gridBuffer);
 
 const colors = [
-    "#ffffff", "#AAAAAA", "#666666", "#222222", "#000000",
+    "#ffffff", "#dddddd", "#aaaaaa", "#666666", "#222222", "#000000",
     "#ff0000", "#700000", "#ff6000", "#ff9000", "#ffff00",
     "#ffff80", "#00ff00", "#007000", "#a0f0a0", "#00ffb0",
     "#00ffff", "#00a0ff", "#acdbff", "#0000ff", "#000070",
