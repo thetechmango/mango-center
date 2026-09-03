@@ -36,9 +36,34 @@ function movePlayer(dt) {
     player.vx *= player.drag;
     player.vy *= player.drag;
 
+    collidePlayer();
+
     player.x += player.vx;
     player.y += player.vy;
 }
+
+function collidePlayer() {
+    if (player.x - player.width / 2 < 0) {
+        player.x = player.width / 2;
+        player.vx *= -1
+    }
+    
+    if (player.x + player.width / 2 > canvas.width) {
+        player.x = canvas.width - player.width / 2;
+        player.vx *= -1
+    }
+
+    if (player.y - player.height / 2 < 0) {
+        player.y = player.height / 2;
+        player.vy *= -1
+    }
+    
+    if (player.y + player.height / 2 > canvas.height) {
+        player.y = canvas.height - player.height / 2;
+        player.vy *= -1
+    }
+}
+
 
 function render() {
     movePlayer();
