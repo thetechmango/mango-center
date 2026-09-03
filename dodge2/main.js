@@ -15,8 +15,8 @@ let player = {
     vy: 0,
     width: 25,
     height: 25,
-    speed: 0.12,
-    drag: 0.9
+    speed: 0.15,
+    drag: 0.97
 };
 
 const keys = {};
