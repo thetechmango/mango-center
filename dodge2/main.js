@@ -13,10 +13,10 @@ let player = {
     y: window.innerHeight / 2,
     vx: 0,
     vy: 0,
-    width: 15,
-    height: 15,
-    speed: 0.15,
-    drag: 0.97
+    width: 20,
+    height: 20,
+    speed: 1.5,
+    drag: 0.9
 };
 
 const keys = {};
@@ -64,10 +64,11 @@ function collidePlayer() {
     }
 }
 
+function update() {
+    movePlayer();
+}
 
 function render() {
-    movePlayer();
-
     // Clear canvas
     ctx.fillStyle = "#000000";
     ctx.fillRect(0, 0, canvas.width, canvas.height);
@@ -80,8 +81,36 @@ function render() {
         player.width, 
         player.height
     );
-    
-    requestAnimationFrame(render);
 }
 
-requestAnimationFrame(render);
+let lastTime = 0;
+let accumulator = 0;
+const FIXED_DELTA_TIME = 1 / 60;
+
+function frame() {
+    const currentTime = performance.now();
+    if (!lastTime) {
+        lastTime = currentTime;
+    }
+
+    let frameTime = (currentTime - lastTime) / 1000;
+    lastTime = currentTime;
+
+    accumulator += frameTime;
+
+    // Cap the maximum frame time to prevent endless catch-up loops
+    if (frameTime > 0.25) {
+        frameTime = 0.25;
+    }
+
+    while (accumulator >= FIXED_DELTA_TIME) {
+        update(FIXED_DELTA_TIME);
+        accumulator -= FIXED_DELTA_TIME;
+    }
+    
+    render();
+    
+    requestAnimationFrame(frame);
+}
+
+requestAnimationFrame(frame);
