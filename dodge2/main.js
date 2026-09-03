@@ -13,8 +13,8 @@ let player = {
     y: window.innerHeight / 2,
     vx: 0,
     vy: 0,
-    width: 25,
-    height: 25,
+    width: 15,
+    height: 15,
     speed: 0.15,
     drag: 0.97
 };
