@@ -149,7 +149,7 @@ let lastX = 0;
 let lastY = 0;
 let didDrag = false;
 
-const ws = new WebSocket("wss://ws.themango.click");
+const ws = new WebSocket("wss://ws.themango.click/mango-grid");
 ws.binaryType = "arraybuffer";
 
 let nextAllowedTime = 0;
