@@ -259,7 +259,19 @@ ws.onmessage = async (e) => {
     }
 
     if (data.type === "chat") {
-        addChatBubble(data.message, data.x, data.y);
+        if (data.admin) {
+            const message = document.createElement("div");
+            message.className = "adminMessage";
+            message.textContent = data.message;
+
+            adminMessages.appendChild(message);
+
+            setTimeout(() => {
+                message.remove();
+            }, 15000);
+        } else {
+            addChatBubble(data.message, data.x, data.y);
+        }
     }
 };
 
@@ -481,6 +493,7 @@ document.getElementById("exportBtn").onclick = () => {
     link.click();
 };
 
+const adminMessages = document.getElementById("adminMessages");
 const chatBubblesDiv = document.getElementById("chatBubbles");
 const chatBubbles = [];
 

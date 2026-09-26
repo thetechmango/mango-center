@@ -213,6 +213,36 @@
             color: #bbb;
         }
 
+        #adminMessages {
+            position: fixed;
+            top: 50%;
+            right: 20px;
+            transform: translateY(-50%);
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+            z-index: 1000;
+            pointer-events: none;
+            max-width: 350px;
+        }
+
+        .adminMessage {
+            background: #444;
+            color: rgb(147, 255, 117);
+            padding: 10px 14px;
+            border-radius: 10px;
+            animation: adminMessageFade 15s ease forwards;
+        }
+
+        @keyframes adminMessageFade {
+            0%, 85% {
+                opacity: 1;
+            }
+            100% {
+                opacity: 0;
+            }
+        }
+
         @keyframes chatFloat {
             0% {
                 opacity: 0;
@@ -297,6 +327,7 @@
         <button id="zoomOutBtn">-</button>
     </div>
 
+    <div id="adminMessages"></div>
     <div id="chatInput">
         <input id="chatText" type="text" maxlength="200" placeholder="Chat...">
     </div>
