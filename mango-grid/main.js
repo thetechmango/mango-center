@@ -257,6 +257,10 @@ ws.onmessage = async (e) => {
 
         needsRender = true;
     }
+
+    if (data.type === "chat") {
+        addChatBubble(data.message, data.x, data.y);
+    }
 };
 
 canvas.onpointerleave = () => {
@@ -477,6 +481,81 @@ document.getElementById("exportBtn").onclick = () => {
     link.click();
 };
 
+const chatBubblesDiv = document.getElementById("chatBubbles");
+const chatBubbles = [];
+
+function addChatBubble(message, x, y) {
+    const element = document.createElement("div");
+
+    element.className = "chatBubble";
+    element.textContent = message;
+
+    chatBubblesDiv.appendChild(element);
+
+    chatBubbles.push({
+        element,
+        x,
+        y,
+        expires: performance.now() + 4000
+    });
+
+    needsRender = true;
+}
+
+const chatInput = document.getElementById("chatInput");
+const chatText = document.getElementById("chatText");
+
+document.addEventListener("keydown", (e) => {
+    if (e.key !== "Enter") return;
+
+    // Don't open chat when already typing somewhere
+    if (
+        document.activeElement === chatText ||
+        document.activeElement.tagName === "INPUT"
+    ) {
+        return;
+    }
+
+    chatInput.style.display = "block";
+    chatText.focus();
+
+    e.preventDefault();
+});
+
+chatText.addEventListener("keydown", (e) => {
+    if (e.key !== "Enter") return;
+
+    e.preventDefault();
+    e.stopPropagation();
+
+    const message = chatText.value.trim();
+
+    chatText.value = "";
+    chatInput.style.display = "none";
+    chatText.blur();
+
+    if (!message) return;
+
+    const rect = canvas.getBoundingClientRect();
+
+    const p = screenToGrid(
+        rect.left + rect.width / 2,
+        rect.top + rect.height / 2
+    );
+
+    if (
+        p.x >= 0 && p.x < SIZE &&
+        p.y >= 0 && p.y < SIZE
+    ) {
+        ws.send(JSON.stringify({
+            type: "chat",
+            message,
+            x: p.x,
+            y: p.y
+        }));
+    }
+});
+
 function worldToScreen(x, y) {
     return {
         x: (x - camera.x) * camera.zoom,
@@ -522,6 +601,26 @@ function render(time) {
 
     if (Object.values(keys).some(Boolean)) {
         needsRender = true;
+    }
+
+    const now = performance.now();
+
+    for (let i = chatBubbles.length - 1; i >= 0; i--) {
+        const bubble = chatBubbles[i];
+
+        if (now >= bubble.expires) {
+            bubble.element.remove();
+            chatBubbles.splice(i, 1);
+            continue;
+        }
+
+        const p = worldToScreen(
+            bubble.x + 0.5,
+            bubble.y + 0.5
+        );
+
+        bubble.element.style.left = `${p.x}px`;
+        bubble.element.style.top = `${p.y}px`;
     }
 
     if (!needsRender) {

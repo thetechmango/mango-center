@@ -154,6 +154,86 @@
             touch-action: none;
         }
 
+        #chatBubbles {
+            position: absolute;
+            inset: 0;
+            z-index: 2;
+            pointer-events: none;
+            overflow: hidden;
+        }
+
+        .chatBubble {
+            position: absolute;
+            transform: translate(-50%, -100%);
+            max-width: 250px;
+
+            padding: 5px 8px;
+
+            background: rgba(0, 0, 0, 0.8);
+            color: white;
+            border-radius: 8px;
+
+            font-size: 14px;
+            line-height: 18px;
+
+            overflow-wrap: anywhere;
+
+            animation: chatFloat 4s ease-out forwards;
+        }
+
+        #chatInput {
+            position: fixed;
+            bottom: 20px;
+            left: 50%;
+            transform: translateX(-50%);
+
+            display: none;
+            z-index: 999;
+
+            width: min(500px, calc(100vw - 40px));
+        }
+
+        #chatText {
+            box-sizing: border-box;
+            width: 100%;
+
+            padding: 10px 14px;
+
+            border: none;
+            border-radius: 10px;
+
+            background: #444;
+            color: white;
+
+            font: inherit;
+            outline: none;
+        }
+
+        #chatText::placeholder {
+            color: #bbb;
+        }
+
+        @keyframes chatFloat {
+            0% {
+                opacity: 0;
+                transform: translate(-50%, -80%);
+            }
+
+            10% {
+                opacity: 1;
+                transform: translate(-50%, -100%);
+            }
+
+            75% {
+                opacity: 1;
+                transform: translate(-50%, -120%);
+            }
+
+            100% {
+                opacity: 0;
+                transform: translate(-50%, -160%);
+            }
+        }
 
         #zoom-btns button {
             width: 40px;
@@ -161,7 +241,7 @@
 
             padding: 0;
 
-            display: flex;              /* ← key */
+            display: flex;
             align-items: center;        /* vertical center */
             justify-content: center;    /* horizontal center */
 
@@ -217,6 +297,10 @@
         <button id="zoomOutBtn">-</button>
     </div>
 
+    <div id="chatInput">
+        <input id="chatText" type="text" maxlength="200" placeholder="Chat...">
+    </div>
+    <div id="chatBubbles"></div>
     <canvas id="canvas" width="1024" height="1024"></canvas>
     <script src="main.js"></script>
 </body>
