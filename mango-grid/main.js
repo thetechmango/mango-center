@@ -51,7 +51,7 @@ const colorPacked = colors.map(c => {
     return (r) | (g << 8) | (b << 16) | (255 << 24);
 });
 
-let selectedColor = 0;
+let selectedColor = parseInt(localStorage.getItem("selectedColor")) || 0;
 
 const paletteDiv = document.getElementById("palette");
 
@@ -74,6 +74,8 @@ function selectColor(index) {
 
     const s = selectSound.cloneNode();
     s.play();
+
+    localStorage.setItem("selectedColor", index.toString())
 
     needsRender = true;
 }
