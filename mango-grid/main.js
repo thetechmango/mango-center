@@ -260,7 +260,7 @@ function connect() {
                 remoteHovers.length = 0;
                 needsRender = true;
             }
-            
+
             document.getElementById("onlineCount").textContent =
                 `Online: ${data.count}`;
         }
@@ -349,7 +349,7 @@ function drawPixel(x, y, color) {
 
 
 
-canvas.onpointerleave = () => {
+window.onpointerleave = () => {
     hoverX = -1;
     hoverY = -1;
 
