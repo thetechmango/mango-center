@@ -255,6 +255,12 @@ function connect() {
 
         if (data.type === "count") {
             onlineCount = data.count;
+
+            if (onlineCount <= 1) {
+                remoteHovers.length = 0;
+                needsRender = true;
+            }
+            
             document.getElementById("onlineCount").textContent =
                 `Online: ${data.count}`;
         }
