@@ -151,8 +151,170 @@ let lastX = 0;
 let lastY = 0;
 let didDrag = false;
 
-const ws = new WebSocket("wss://ws.themango.click/mango-grid");
-ws.binaryType = "arraybuffer";
+let ws = null;
+
+const connectionStatus = document.getElementById("connectionStatus");
+
+function updateConnectionStatus() {
+    if (ws?.readyState === WebSocket.OPEN) {
+        connectionStatus.textContent = "Connected";
+        connectionStatus.className = "connected";
+        connectionStatus.disabled = true;
+    } else if (ws?.readyState === WebSocket.CONNECTING) {
+        connectionStatus.textContent = "Connecting...";
+        connectionStatus.className = "connecting";
+        connectionStatus.disabled = true;
+    } else {
+        connectionStatus.textContent = "Disconnected - Retry";
+        connectionStatus.className = "disconnected";
+        connectionStatus.disabled = false;
+    }
+}
+
+function connect() {
+    if (ws?.readyState === WebSocket.OPEN ||
+        ws?.readyState === WebSocket.CONNECTING) {
+        return;
+    }
+
+    updateConnectionStatus();
+
+    ws = new WebSocket("wss://ws.themango.click/mango-grid");
+    ws.binaryType = "arraybuffer";
+
+    ws.onopen = () => {
+        updateConnectionStatus();
+
+        const savedAdminCode = localStorage.getItem("adminCode");
+
+        if (savedAdminCode) {
+            adminCode.value = savedAdminCode;
+
+            setTimeout(() => {
+                if (ws.readyState === WebSocket.OPEN) {
+                    submitAdminCode();
+                }
+            }, 500);
+        }
+    };
+
+    ws.onclose = () => {
+        updateConnectionStatus();
+    };
+
+    ws.onerror = () => {
+        updateConnectionStatus();
+    };
+
+    ws.onmessage = async (e) => {
+        if (typeof e.data !== "string") {
+            const ds = new DecompressionStream("deflate-raw");
+
+            const stream = new Blob([e.data])
+                .stream()
+                .pipeThrough(ds);
+
+            const decompressed =
+                await new Response(stream).arrayBuffer();
+
+            console.log("DECOMPRESSED:", decompressed.byteLength);
+
+            const arr = new Uint32Array(decompressed);
+
+            grid.set(arr);
+            pixels32.set(grid);
+
+            offCtx.putImageData(imageData, 0, 0);
+
+            needsRender = true;
+
+            document.getElementById("loader").style.display = "none";
+
+            return;
+        }
+
+        const data = JSON.parse(e.data);
+
+        if (data.type === "id") {
+            myId = data.id;
+            return;
+        }
+
+        if (data.type === "auth") {
+            if (data.success) {
+                isAdmin = true;
+                localStorage.setItem("adminCode", adminCode.value);
+                document.getElementById("adminPanel").style.display = "none";
+            } else if (data.reason === "too_many_attempts") {
+                alert("Too many attempts");
+                document.getElementById("adminPanel").style.display = "none";
+            } else {
+                alert("Wrong code");
+            }
+        }
+
+        if (data.type === "count") {
+            onlineCount = data.count;
+            document.getElementById("onlineCount").textContent =
+                `Online: ${data.count}`;
+        }
+
+        if (data.type === "place") {
+            const { x, y, color } = data;
+
+            const i = y * SIZE + x;
+            grid[i] = color;
+
+            const r = color & 255;
+            const g = (color >> 8) & 255;
+            const b = (color >> 16) & 255;
+
+            offCtx.fillStyle = `rgb(${r},${g},${b})`;
+            offCtx.fillRect(x, y, 1, 1);
+
+            needsRender = true;
+        }
+
+        if (data.type === "cooldown") {
+            nextAllowedTime = Date.now() + data.remaining;
+        }
+
+        if (data.type === "hovers") {
+            if (onlineCount <= 1) return;
+
+            remoteHovers.length = 0;
+
+            for (const hover of data.hovers) {
+                // Discard our own hover
+                if (hover.id === myId) continue;
+
+                remoteHovers.push(hover);
+            }
+
+            needsRender = true;
+        }
+
+        if (data.type === "chat") {
+            if (data.admin) {
+                const message = document.createElement("div");
+                message.className = "adminMessage";
+                message.textContent = data.message;
+
+                adminMessages.appendChild(message);
+
+                setTimeout(() => {
+                    message.remove();
+                }, 15000);
+            } else {
+                addChatBubble(data.message, data.x, data.y);
+            }
+        }
+    };
+}
+
+connectionStatus.onclick = connect;
+
+connect();
 
 let nextAllowedTime = 0;
 
@@ -179,110 +341,7 @@ function drawPixel(x, y, color) {
     );
 }
 
-ws.onmessage = async (e) => {
-    if (typeof e.data !== "string") {
-        const ds = new DecompressionStream("deflate-raw");
 
-        const stream = new Blob([e.data])
-            .stream()
-            .pipeThrough(ds);
-
-        const decompressed =
-            await new Response(stream).arrayBuffer();
-
-        console.log("DECOMPRESSED:", decompressed.byteLength);
-
-        const arr = new Uint32Array(decompressed);
-
-        grid.set(arr);
-        pixels32.set(grid);
-
-        offCtx.putImageData(imageData, 0, 0);
-
-        needsRender = true;
-
-        document.getElementById("loader").style.display = "none";
-
-        return;
-    }
-
-    const data = JSON.parse(e.data);
-
-    if (data.type === "id") {
-        myId = data.id;
-        return;
-    }
-
-    if (data.type === "auth") {
-        if (data.success) {
-            isAdmin = true;
-            alert("Admin mode enabled");
-            document.getElementById("adminPanel").style.display = "none";
-        } else if (data.reason === "too_many_attempts") {
-            alert("Too many attempts");
-            document.getElementById("adminPanel").style.display = "none";
-        } else {
-            alert("Wrong code");
-        }
-    }
-
-    if (data.type === "count") {
-        onlineCount = data.count;
-        document.getElementById("onlineCount").textContent =
-            `Online: ${data.count}`;
-    }
-
-    if (data.type === "place") {
-        const { x, y, color } = data;
-
-        const i = y * SIZE + x;
-        grid[i] = color;
-
-        const r = color & 255;
-        const g = (color >> 8) & 255;
-        const b = (color >> 16) & 255;
-
-        offCtx.fillStyle = `rgb(${r},${g},${b})`;
-        offCtx.fillRect(x, y, 1, 1);
-
-        needsRender = true;
-    }
-
-    if (data.type === "cooldown") {
-        nextAllowedTime = Date.now() + data.remaining;
-    }
-
-    if (data.type === "hovers") {
-        if (onlineCount <= 1) return;
-
-        remoteHovers.length = 0;
-
-        for (const hover of data.hovers) {
-            // Discard our own hover
-            if (hover.id === myId) continue;
-
-            remoteHovers.push(hover);
-        }
-
-        needsRender = true;
-    }
-
-    if (data.type === "chat") {
-        if (data.admin) {
-            const message = document.createElement("div");
-            message.className = "adminMessage";
-            message.textContent = data.message;
-
-            adminMessages.appendChild(message);
-
-            setTimeout(() => {
-                message.remove();
-            }, 15000);
-        } else {
-            addChatBubble(data.message, data.x, data.y);
-        }
-    }
-};
 
 canvas.onpointerleave = () => {
     hoverX = -1;
@@ -457,7 +516,16 @@ function zoom(scale, x, y) {
     }
 }
 
+function isTyping() {
+    return (
+        document.activeElement.tagName === "INPUT" ||
+        document.activeElement.tagName === "TEXTAREA"
+    );
+}
+
 window.addEventListener("keydown", (e) => {
+    if (isTyping()) return;
+
     keys[e.key.toLowerCase()] = true;
 });
 
@@ -473,14 +541,23 @@ document.getElementById("zoomOutBtn").addEventListener("click", (e) => {
     zoom(1 / 1.2, canvas.width / 2, canvas.height / 2);
 });
 
-document.getElementById("authBtn").onclick = () => {
-    const code = document.getElementById("adminCode").value;
+function submitAdminCode() {
+    const code = adminCode.value;
 
     ws.send(JSON.stringify({
         type: "auth",
         code
     }));
-};
+}
+
+authBtn.onclick = submitAdminCode;
+
+adminCode.addEventListener("keydown", (e) => {
+    if (e.key === "Enter") {
+        e.preventDefault();
+        submitAdminCode();
+    }
+});
 
 document.getElementById("exportBtn").onclick = () => {
     const now = new Date();
