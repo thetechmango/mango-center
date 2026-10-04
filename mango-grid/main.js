@@ -316,7 +316,7 @@ connectionStatus.onclick = connect;
 
 connect();
 
-let nextAllowedTime = 0;
+let nextAllowedTime = Date.now() + 5000;
 
 let isAdmin = false;
 
