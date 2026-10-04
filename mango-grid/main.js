@@ -160,6 +160,13 @@ let isAdmin = false;
 
 const COOLDOWN_MS = 5000;
 
+window.addEventListener('beforeunload', () => {
+  if (ws && ws.readyState === WebSocket.OPEN) {
+    ws.close();
+  }
+});
+
+
 function drawPixel(x, y, color) {
     ctx.fillStyle =
         `#${(color & 0xFFFFFF).toString(16).padStart(6, "0")}`;
